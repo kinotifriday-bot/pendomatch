@@ -34,7 +34,6 @@ const db = getFirestore(app)
 export default function Page() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-
   const [user, setUser] = useState(null)
 
   const [profiles, setProfiles] = useState([])
@@ -51,21 +50,12 @@ export default function Page() {
   }, [])
 
   async function loadProfiles() {
-    try {
-      const snap = await getDocs(collection(db, "profiles"))
-      setProfiles(snap.docs.map(d => d.data()))
-    } catch (err) {
-      setStatus("Failed to load profiles")
-    }
+    const snap = await getDocs(collection(db, "profiles"))
+    setProfiles(snap.docs.map(d => d.data()))
   }
 
   async function signup() {
     try {
-      if (!email || !password) {
-        setStatus("Enter email and password")
-        return
-      }
-
       const res = await createUserWithEmailAndPassword(auth, email, password)
       setUser(res.user)
 
@@ -103,13 +93,13 @@ export default function Page() {
     return isPremium || swipes < limit
   }
 
-  function nextProfile() {
+  function next() {
     setIndex(i => i + 1)
   }
 
   async function likeProfile() {
     if (!canSwipe()) {
-      setStatus("🚫 Upgrade required to continue")
+      setStatus("🚫 Upgrade required")
       return
     }
 
@@ -121,29 +111,18 @@ export default function Page() {
       to: target.uid
     })
 
-    const likesSnap = await getDocs(collection(db, "likes"))
-    const likes = likesSnap.docs.map(d => d.data())
-
-    const match = likes.find(
-      l => l.from === target.uid && l.to === user.uid
-    )
-
-    if (match) {
-      setStatus("🔥 It's a MATCH!")
-    }
-
     setSwipes(s => s + 1)
-    nextProfile()
+    next()
   }
 
   function passProfile() {
     if (!canSwipe()) {
-      setStatus("🚫 Upgrade required to continue")
+      setStatus("🚫 Upgrade required")
       return
     }
 
     setSwipes(s => s + 1)
-    nextProfile()
+    next()
   }
 
   async function upgradeToPremium() {
@@ -166,79 +145,151 @@ export default function Page() {
   return (
     <main style={{
       minHeight: "100vh",
-      padding: "40px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
       fontFamily: "system-ui",
-      background: "linear-gradient(135deg,#ff2d75,#7b2ff7,#00c6ff)",
-      color: "white"
+      background: "linear-gradient(135deg,#ff4d6d,#7b2ff7,#00c6ff)"
     }}>
 
-      <h1>PendoMatch</h1>
+      <div style={{
+        width: "100%",
+        maxWidth: "420px",
+        background: "white",
+        borderRadius: "20px",
+        padding: "25px",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.25)"
+      }}>
 
-      {!user ? (
-        <div>
-          <input
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+        <h1 style={{
+          textAlign: "center",
+          color: "#7b2ff7",
+          marginBottom: "5px"
+        }}>
+          PendoMatch 💘
+        </h1>
 
-          <input
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <p style={{
+          textAlign: "center",
+          fontSize: "13px",
+          color: "#666",
+          marginBottom: "20px"
+        }}>
+          Swipe. Match. Connect.
+        </p>
 
-          <button onClick={signup}>Sign Up</button>
-          <button onClick={login}>Login</button>
-        </div>
-      ) : (
-        <div>
+        {!user ? (
+          <>
+            <input
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+            />
 
-          <p>Swipes: {swipes} / {limit}</p>
-          <p>{isPremium ? "🔥 Premium Active" : "Free Plan"}</p>
+            <input
+              placeholder="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={inputStyle}
+            />
 
-          {current ? (
-            <div style={{
-              background: "white",
-              color: "black",
-              padding: "20px",
-              borderRadius: "12px",
-              maxWidth: "300px"
-            }}>
-              <h2>{current.name}</h2>
-              <p>{current.age}</p>
-              <p>{current.gender}</p>
-              <p>{current.bio}</p>
-
-              <button onClick={likeProfile}>Like</button>
-              <button onClick={passProfile}>Pass</button>
-            </div>
-          ) : (
-            <h2>No more profiles</h2>
-          )}
-
-          {!isPremium && swipes >= limit && (
-            <button
-              onClick={upgradeToPremium}
-              style={{
-                marginTop: "20px",
-                padding: "12px",
-                background: "gold",
-                border: "none",
-                fontWeight: "bold",
-                cursor: "pointer"
-              }}
-            >
-              Upgrade to Premium
+            <button onClick={login} style={primaryBtn}>
+              Login
             </button>
-          )}
 
-          <p>{status}</p>
+            <button onClick={signup} style={secondaryBtn}>
+              Sign Up
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ textAlign: "center", fontSize: "13px" }}>
+              {isPremium ? "🔥 Premium Active" : "Free Plan"}
+            </p>
 
-        </div>
-      )}
+            <p style={{ textAlign: "center", fontSize: "12px", color: "#888" }}>
+              Swipes {swipes} / {limit}
+            </p>
 
+            {current ? (
+              <div style={{
+                marginTop: "15px",
+                padding: "15px",
+                borderRadius: "15px",
+                border: "1px solid #eee"
+              }}>
+                <h3>{current.name}</h3>
+                <p>{current.age} • {current.gender}</p>
+                <p style={{ color: "#666" }}>{current.bio}</p>
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                  <button onClick={likeProfile} style={primaryBtn}>
+                    Like
+                  </button>
+
+                  <button onClick={passProfile} style={secondaryBtn}>
+                    Pass
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p style={{ textAlign: "center" }}>No more profiles</p>
+            )}
+
+            {!isPremium && swipes >= limit && (
+              <button onClick={upgradeToPremium} style={{
+                marginTop: "20px",
+                width: "100%",
+                padding: "12px",
+                borderRadius: "10px",
+                border: "none",
+                background: "#ffb703",
+                fontWeight: "bold"
+              }}>
+                Upgrade to Premium
+              </button>
+            )}
+
+            <p style={{
+              textAlign: "center",
+              fontSize: "12px",
+              color: "#999"
+            }}>
+              {status}
+            </p>
+          </>
+        )}
+
+      </div>
     </main>
   )
+}
+
+const inputStyle = {
+  width: "100%",
+  padding: "12px",
+  marginBottom: "10px",
+  borderRadius: "10px",
+  border: "1px solid #ddd"
+}
+
+const primaryBtn = {
+  width: "100%",
+  padding: "10px",
+  background: "#7b2ff7",
+  color: "white",
+  border: "none",
+  borderRadius: "10px",
+  cursor: "pointer"
+}
+
+const secondaryBtn = {
+  width: "100%",
+  padding: "10px",
+  background: "#eee",
+  border: "none",
+  borderRadius: "10px",
+  cursor: "pointer"
 }
