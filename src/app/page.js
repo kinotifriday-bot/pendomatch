@@ -18,6 +18,9 @@ import {
   getDoc
 } from "firebase/firestore"
 
+import { useSwipeable } from "react-swipeable"
+import { motion, useMotionValue, useTransform } from "framer-motion"
+
 const firebaseConfig = {
   apiKey: "AIzaSyADc9iLS4oeubdeDfnccCiUN5gzzzLxeg",
   authDomain: "mingle-bff25.firebaseapp.com",
@@ -44,6 +47,13 @@ export default function Page() {
 
   const [isPremium, setIsPremium] = useState(false)
   const [status, setStatus] = useState("")
+
+  const [matchPopup, setMatchPopup] = useState(null)
+
+  const x = useMotionValue(0)
+  const rotate = useTransform(x, [-200, 200], [-10, 10])
+  const likeOpacity = useTransform(x, [0, 120], [0, 1])
+  const passOpacity = useTransform(x, [-120, 0], [1, 0])
 
   useEffect(() => {
     loadProfiles()
@@ -93,17 +103,17 @@ export default function Page() {
     return isPremium || swipes < limit
   }
 
-  function next() {
+  function nextProfile() {
     setIndex(i => i + 1)
+    x.set(0)
   }
 
-  async function likeProfile() {
+  async function likeProfile(target) {
     if (!canSwipe()) {
-      setStatus("🚫 Upgrade required")
+      setStatus("Upgrade required")
       return
     }
 
-    const target = profiles[index]
     if (!target || !user) return
 
     await addDoc(collection(db, "likes"), {
@@ -111,152 +121,158 @@ export default function Page() {
       to: target.uid
     })
 
-    setSwipes(s => s + 1)
-    next()
-  }
+    const snap = await getDocs(collection(db, "likes"))
 
-  function passProfile() {
-    if (!canSwipe()) {
-      setStatus("🚫 Upgrade required")
-      return
+    const matchFound = snap.docs.some(d =>
+      d.data().from === target.uid &&
+      d.data().to === user.uid
+    )
+
+    if (matchFound) {
+      await addDoc(collection(db, "matches"), {
+        users: [user.uid, target.uid],
+        createdAt: Date.now()
+      })
+
+      setMatchPopup(target.name || "Someone")
     }
 
     setSwipes(s => s + 1)
-    next()
+    nextProfile()
   }
+
+  function passProfile() {
+    setSwipes(s => s + 1)
+    nextProfile()
+  }
+
+  const handlers = useSwipeable({
+    onSwipedLeft: () => passProfile(),
+    onSwipedRight: () => likeProfile(current),
+    trackMouse: true
+  })
+
+  const current = profiles[index]
+  const next = profiles[index + 1]
 
   async function upgradeToPremium() {
-    const url = "https://pay.pesapal.com/iframe/PesapalIframe3.aspx"
-
-    const params = new URLSearchParams({
-      amount: "100",
-      description: "PendoMatch Premium",
-      type: "MERCHANT",
-      reference: user.uid,
-      email: user.email,
-      currency: "KES"
-    })
-
-    window.location.href = `${url}?${params.toString()}`
+    window.location.href = "https://pay.pesapal.com"
   }
 
-  const current = profiles.length > 0 ? profiles[index] : null
-
   return (
-    <main style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "system-ui",
-      background: "linear-gradient(135deg,#ff4d6d,#7b2ff7,#00c6ff)"
-    }}>
+    <main style={styles.bg}>
 
-      <div style={{
-        width: "100%",
-        maxWidth: "420px",
-        background: "white",
-        borderRadius: "20px",
-        padding: "25px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.25)"
-      }}>
+      {matchPopup && (
+        <div style={styles.overlay}>
+          <div style={styles.popup}>
+            <h2>💘 It's a Match!</h2>
+            <p>You matched with {matchPopup}</p>
+            <button onClick={() => setMatchPopup(null)} style={btn}>
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
 
-        <h1 style={{
-          textAlign: "center",
-          color: "#7b2ff7",
-          marginBottom: "5px"
-        }}>
+      <div style={styles.card}>
+
+        <h1 style={{ textAlign: "center", color: "#7b2ff7" }}>
           PendoMatch 💘
         </h1>
 
-        <p style={{
-          textAlign: "center",
-          fontSize: "13px",
-          color: "#666",
-          marginBottom: "20px"
-        }}>
-          Swipe. Match. Connect.
-        </p>
-
         {!user ? (
           <>
-            <input
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-            />
+            <input placeholder="Email" value={email}
+              onChange={e => setEmail(e.target.value)} style={input} />
 
-            <input
-              placeholder="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={inputStyle}
-            />
+            <input placeholder="Password" type="password"
+              value={password} onChange={e => setPassword(e.target.value)} style={input} />
 
-            <button onClick={login} style={primaryBtn}>
-              Login
-            </button>
-
-            <button onClick={signup} style={secondaryBtn}>
-              Sign Up
-            </button>
+            <button onClick={login} style={btn}>Login</button>
+            <button onClick={signup} style={btn2}>Sign Up</button>
           </>
         ) : (
           <>
-            <p style={{ textAlign: "center", fontSize: "13px" }}>
-              {isPremium ? "🔥 Premium Active" : "Free Plan"}
+            <p style={{ textAlign: "center" }}>
+              {isPremium ? "Premium" : "Free"} • Swipes {swipes}/{limit}
             </p>
 
-            <p style={{ textAlign: "center", fontSize: "12px", color: "#888" }}>
-              Swipes {swipes} / {limit}
-            </p>
+            {/* CARD STACK */}
+            <div style={{ position: "relative", height: "420px" }}>
 
-            {current ? (
-              <div style={{
-                marginTop: "15px",
-                padding: "15px",
-                borderRadius: "15px",
-                border: "1px solid #eee"
-              }}>
-                <h3>{current.name}</h3>
-                <p>{current.age} • {current.gender}</p>
-                <p style={{ color: "#666" }}>{current.bio}</p>
-
-                <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                  <button onClick={likeProfile} style={primaryBtn}>
-                    Like
-                  </button>
-
-                  <button onClick={passProfile} style={secondaryBtn}>
-                    Pass
-                  </button>
+              {next && (
+                <div style={{
+                  ...profileCard,
+                  position: "absolute",
+                  top: 10,
+                  left: 0,
+                  right: 0,
+                  transform: "scale(0.95)",
+                  opacity: 0.4,
+                  zIndex: 0
+                }}>
+                  {next.photo && <img src={next.photo} style={img} />}
+                  <h3>{next.name}</h3>
                 </div>
-              </div>
-            ) : (
-              <p style={{ textAlign: "center" }}>No more profiles</p>
-            )}
+              )}
+
+              {current && (
+                <motion.div
+                  {...handlers}
+                  style={{
+                    ...profileCard,
+                    position: "relative",
+                    zIndex: 2,
+                    x,
+                    rotate
+                  }}
+                  whileDrag={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+
+                  {/* Swipe indicators */}
+                  <motion.div style={{
+                    position: "absolute",
+                    left: 20,
+                    top: 20,
+                    color: "green",
+                    fontWeight: "bold",
+                    opacity: likeOpacity
+                  }}>
+                    LIKE
+                  </motion.div>
+
+                  <motion.div style={{
+                    position: "absolute",
+                    right: 20,
+                    top: 20,
+                    color: "red",
+                    fontWeight: "bold",
+                    opacity: passOpacity
+                  }}>
+                    PASS
+                  </motion.div>
+
+                  {current.photo && (
+                    <img src={current.photo} style={img} />
+                  )}
+
+                  <h3>{current.name}</h3>
+                  <p>{current.age} • {current.gender}</p>
+                  <p>{current.bio}</p>
+
+                </motion.div>
+              )}
+
+            </div>
 
             {!isPremium && swipes >= limit && (
-              <button onClick={upgradeToPremium} style={{
-                marginTop: "20px",
-                width: "100%",
-                padding: "12px",
-                borderRadius: "10px",
-                border: "none",
-                background: "#ffb703",
-                fontWeight: "bold"
-              }}>
+              <button onClick={upgradeToPremium} style={upgradeBtn}>
                 Upgrade to Premium
               </button>
             )}
 
-            <p style={{
-              textAlign: "center",
-              fontSize: "12px",
-              color: "#999"
-            }}>
+            <p style={{ textAlign: "center", fontSize: "12px", color: "#999" }}>
               {status}
             </p>
           </>
@@ -267,29 +283,84 @@ export default function Page() {
   )
 }
 
-const inputStyle = {
+const styles = {
+  bg: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(135deg,#ff4d6d,#7b2ff7,#00c6ff)",
+    fontFamily: "system-ui"
+  },
+  card: {
+    width: "100%",
+    maxWidth: "420px",
+    background: "white",
+    borderRadius: "20px",
+    padding: "20px"
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.7)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  popup: {
+    background: "white",
+    padding: "20px",
+    borderRadius: "15px",
+    textAlign: "center"
+  }
+}
+
+const input = {
   width: "100%",
-  padding: "12px",
+  padding: "10px",
   marginBottom: "10px",
   borderRadius: "10px",
   border: "1px solid #ddd"
 }
 
-const primaryBtn = {
+const btn = {
   width: "100%",
   padding: "10px",
   background: "#7b2ff7",
   color: "white",
   border: "none",
-  borderRadius: "10px",
-  cursor: "pointer"
+  borderRadius: "10px"
 }
 
-const secondaryBtn = {
+const btn2 = {
   width: "100%",
   padding: "10px",
   background: "#eee",
   border: "none",
   borderRadius: "10px",
-  cursor: "pointer"
+  marginTop: "5px"
+}
+
+const profileCard = {
+  padding: "15px",
+  border: "1px solid #eee",
+  borderRadius: "15px",
+  marginTop: "10px",
+  background: "white"
+}
+
+const img = {
+  width: "100%",
+  borderRadius: "12px",
+  marginBottom: "10px"
+}
+
+const upgradeBtn = {
+  width: "100%",
+  padding: "12px",
+  background: "#ffb703",
+  border: "none",
+  borderRadius: "10px",
+  fontWeight: "bold",
+  marginTop: "15px"
 }
