@@ -40,8 +40,6 @@ const firebaseConfig = {
   appId: "1:837882207909:web:3841ee712f9a0da4cd774c"
 }
 
-import { getApps, initializeApp } from "firebase/app"
-
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 
 const auth = getAuth(app)
