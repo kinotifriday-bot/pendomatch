@@ -142,7 +142,7 @@ export default function Page() {
   /* ---------------- PROFILE ---------------- */
 
   async function uploadPhoto(file) {
-    const storageRef = ref(storage, `profiles/${user.uid}`)
+    const storageRef = ref(storage, "profiles/" + user.uid)
 
     await uploadBytes(storageRef, file)
 
