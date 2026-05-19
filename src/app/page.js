@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getApps, initializeApp } from "firebase/app"
+import { auth, db, storage } from "../firebase"
 
 import {
   getAuth,
@@ -39,7 +39,6 @@ const firebaseConfig = {
   messagingSenderId: "837882207909",
   appId: "1:837882207909:web:d36f6ea39fe66f8dcd774c"
 };
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 
 const auth = getAuth(app)
 const db = getFirestore(app)
