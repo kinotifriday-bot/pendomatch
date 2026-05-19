@@ -1,8 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { initializeApp } from "firebase/app"
+"use client"
 
+import { useEffect, useState } from "react"
+import { getApps, initializeApp } from "firebase/app"
+
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from "firebase/auth"
 import {
   getAuth,
   createUserWithEmailAndPassword,
