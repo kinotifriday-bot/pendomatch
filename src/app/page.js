@@ -1,4 +1,3 @@
-```jsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -37,7 +36,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyADc9iLS4oeubdeDfnccCiUN5gzzzLxeg",
   authDomain: "mingle-bff25.firebaseapp.com",
   projectId: "mingle-bff25",
- storageBucket: "mingle-bff25.appspot.com",
+  storageBucket: "mingle-bff25.appspot.com",
   messagingSenderId: "837882207909",
   appId: "1:837882207909:web:3841ee712f9a0da4cd774c"
 }
@@ -87,11 +86,7 @@ export default function Page() {
 
   async function signup() {
     try {
-      const res = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      )
+      const res = await createUserWithEmailAndPassword(auth, email, password)
 
       setUser(res.user)
 
@@ -101,21 +96,19 @@ export default function Page() {
 
       setStep("profile")
     } catch (err) {
+      console.log(err)
       alert(err.message)
     }
   }
 
   async function login() {
-  if (!email || !password) {
-  alert("Email and password required")
-  return
-}
+    if (!email || !password) {
+      alert("Email and password required")
+      return
+    }
+
     try {
-      const res = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      )
+      const res = await signInWithEmailAndPassword(auth, email, password)
 
       setUser(res.user)
 
@@ -125,17 +118,21 @@ export default function Page() {
 
       loadProfiles()
       loadMatches()
-   catch (err) {
-  console.log("LOGIN ERROR:", err.code, err.message)
-  alert(err.message)
-}
+    } catch (err) {
+      console.log("LOGIN ERROR:", err.code, err.message)
+      alert(err.message)
+    }
   }
 
   async function checkSubscription(uid) {
-    const snap = await getDoc(doc(db, "subscriptions", uid))
+    try {
+      const snap = await getDoc(doc(db, "subscriptions", uid))
 
-    if (snap.exists()) {
-      setIsSubscribed(snap.data().premium)
+      if (snap.exists()) {
+        setIsSubscribed(snap.data().premium)
+      }
+    } catch (e) {
+      console.log("subscription error", e)
     }
   }
 
@@ -143,9 +140,7 @@ export default function Page() {
 
   async function uploadPhoto(file) {
     const storageRef = ref(storage, "profiles/" + user.uid)
-
     await uploadBytes(storageRef, file)
-
     return await getDownloadURL(storageRef)
   }
 
@@ -164,9 +159,9 @@ export default function Page() {
       })
 
       loadProfiles()
-
       setStep("app")
     } catch (err) {
+      console.log(err)
       alert(err.message)
     }
   }
@@ -174,24 +169,29 @@ export default function Page() {
   /* ---------------- LOADERS ---------------- */
 
   async function loadProfiles() {
-    const snap = await getDocs(collection(db, "profiles"))
-
-    const data = snap.docs.map((d) => d.data())
-
-    setProfiles(data.filter((p) => p.uid !== user?.uid))
+    try {
+      const snap = await getDocs(collection(db, "profiles"))
+      const data = snap.docs.map((d) => d.data())
+      setProfiles(data.filter((p) => p.uid !== user?.uid))
+    } catch (e) {
+      console.log(e)
+    }
   }
 
   async function loadMatches() {
-    const snap = await getDocs(collection(db, "matches"))
+    try {
+      const snap = await getDocs(collection(db, "matches"))
+      const data = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }))
 
-    const data = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data()
-    }))
-
-    setMatches(
-      data.filter((m) => m.users.includes(user?.uid))
-    )
+      setMatches(
+        data.filter((m) => m.users.includes(user?.uid))
+      )
+    } catch (e) {
+      console.log(e)
+    }
   }
 
   /* ---------------- CHAT ---------------- */
@@ -212,10 +212,9 @@ export default function Page() {
   }, [activeChat])
 
   async function sendMessage() {
-    if (!message.trim()) return
+    if (!message.trim() || !activeChat) return
 
     const chatRef = doc(db, "chats", activeChat)
-
     const snap = await getDoc(chatRef)
 
     const oldMessages = snap.data()?.messages || []
@@ -270,7 +269,6 @@ export default function Page() {
       })
 
       setMatchPopup(`You matched with ${target.name}`)
-
       loadMatches()
     }
 
@@ -279,7 +277,7 @@ export default function Page() {
 
   const handlers = useSwipeable({
     onSwipedLeft: () => nextProfile(),
-    onSwipedRight: () => likeProfile(current),
+    onSwipedRight: () => current && likeProfile(current),
     trackMouse: true
   })
 
@@ -289,8 +287,6 @@ export default function Page() {
     <div style={styles.app}>
       <div style={styles.container}>
         <h1 style={styles.logo}>PendoMatch</h1>
-
-        {/* AUTH */}
 
         {step === "auth" && (
           <div style={styles.card}>
@@ -310,23 +306,15 @@ export default function Page() {
               style={styles.input}
             />
 
-            <button
-              onClick={signup}
-              style={styles.signupBtn}
-            >
+            <button onClick={signup} style={styles.signupBtn}>
               SIGN UP
             </button>
 
-            <button
-              onClick={login}
-              style={styles.loginBtn}
-            >
+            <button onClick={login} style={styles.loginBtn}>
               Login
             </button>
           </div>
         )}
-
-        {/* PROFILE */}
 
         {step === "profile" && (
           <div style={styles.card}>
@@ -336,10 +324,7 @@ export default function Page() {
               placeholder="Name"
               style={styles.input}
               onChange={(e) =>
-                setProfileData({
-                  ...profileData,
-                  name: e.target.value
-                })
+                setProfileData({ ...profileData, name: e.target.value })
               }
             />
 
@@ -347,10 +332,7 @@ export default function Page() {
               placeholder="Age"
               style={styles.input}
               onChange={(e) =>
-                setProfileData({
-                  ...profileData,
-                  age: e.target.value
-                })
+                setProfileData({ ...profileData, age: e.target.value })
               }
             />
 
@@ -358,10 +340,7 @@ export default function Page() {
               placeholder="Gender"
               style={styles.input}
               onChange={(e) =>
-                setProfileData({
-                  ...profileData,
-                  gender: e.target.value
-                })
+                setProfileData({ ...profileData, gender: e.target.value })
               }
             />
 
@@ -369,10 +348,7 @@ export default function Page() {
               placeholder="Looking For"
               style={styles.input}
               onChange={(e) =>
-                setProfileData({
-                  ...profileData,
-                  lookingFor: e.target.value
-                })
+                setProfileData({ ...profileData, lookingFor: e.target.value })
               }
             />
 
@@ -380,138 +356,34 @@ export default function Page() {
               placeholder="Bio"
               style={styles.textarea}
               onChange={(e) =>
-                setProfileData({
-                  ...profileData,
-                  bio: e.target.value
-                })
+                setProfileData({ ...profileData, bio: e.target.value })
               }
             />
 
-            <input
-              type="file"
-              onChange={(e) =>
-                setPhotoFile(e.target.files[0])
-              }
-            />
+            <input type="file" onChange={(e) => setPhotoFile(e.target.files[0])} />
 
-            <button
-              style={styles.signupBtn}
-              onClick={saveProfile}
-            >
+            <button style={styles.signupBtn} onClick={saveProfile}>
               Save Profile
             </button>
           </div>
         )}
-
-        {/* APP */}
 
         {step === "app" && (
           <>
             {!isSubscribed && (
               <div style={styles.paywall}>
                 <h2>Subscription Required</h2>
-
-                <p>
-                  Subscribe to unlock messaging and
-                  premium features.
-                </p>
-
-                <button style={styles.signupBtn}>
-                  Subscribe
-                </button>
               </div>
             )}
 
             {isSubscribed && current && (
-              <motion.div
-                {...handlers}
-                style={{
-                  ...styles.swipeCard,
-                  x,
-                  rotate
-                }}
-              >
-                <img
-                  src={current.photo}
-                  alt=""
-                  style={styles.image}
-                />
-
+              <motion.div {...handlers} style={{ ...styles.swipeCard, x, rotate }}>
+                <img src={current.photo} style={styles.image} />
                 <h2>{current.name}</h2>
-
                 <p>{current.bio}</p>
               </motion.div>
             )}
-
-            {/* MATCHES */}
-
-            <div style={styles.matchesBox}>
-              <h3>Matches</h3>
-
-              {matches.map((m) => (
-                <button
-                  key={m.id}
-                  style={styles.matchBtn}
-                  onClick={() =>
-                    setActiveChat(m.chatId)
-                  }
-                >
-                  Open Chat
-                </button>
-              ))}
-            </div>
-
-            {/* CHAT */}
-
-            {activeChat && (
-              <div style={styles.chatBox}>
-                <h3>Chat</h3>
-
-                <div style={styles.messages}>
-                  {messages.map((m, i) => (
-                    <div key={i} style={styles.msg}>
-                      {m.text}
-                    </div>
-                  ))}
-                </div>
-
-                <input
-                  placeholder="Type message"
-                  value={message}
-                  onChange={(e) =>
-                    setMessage(e.target.value)
-                  }
-                  style={styles.input}
-                />
-
-                <button
-                  onClick={sendMessage}
-                  style={styles.signupBtn}
-                >
-                  Send
-                </button>
-              </div>
-            )}
           </>
-        )}
-
-        {/* MATCH POPUP */}
-
-        {matchPopup && (
-          <div style={styles.popupOverlay}>
-            <div style={styles.popup}>
-              <h2>{matchPopup}</h2>
-
-              <button
-                style={styles.signupBtn}
-                onClick={() =>
-                  setMatchPopup("")
-                }
-              >
-                Continue
-              </button>
-            </div>
-          </div>
         )}
       </div>
     </div>
@@ -521,146 +393,14 @@ export default function Page() {
 /* ---------------- STYLES ---------------- */
 
 const styles = {
-  app: {
-    minHeight: "100vh",
-    background: "#f3f4f6",
-    padding: 20,
-    fontFamily: "Arial"
-  },
-
-  container: {
-    maxWidth: 450,
-    margin: "0 auto"
-  },
-
-  logo: {
-    textAlign: "center",
-    marginBottom: 20,
-    color: "#111827"
-  },
-
-  card: {
-    background: "#ffffff",
-    padding: 20,
-    borderRadius: 14,
-    boxShadow: "0 0 10px rgba(0,0,0,0.1)"
-  },
-
-  input: {
-    width: "100%",
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 10,
-    border: "1px solid #ccc",
-    background: "#ffffff",
-    color: "#000000",
-    fontSize: 16,
-    outline: "none"
-  },
-
-  textarea: {
-    width: "100%",
-    minHeight: 100,
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 10,
-    border: "1px solid #ccc",
-    background: "#ffffff",
-    color: "#000000",
-    fontSize: 16
-  },
-
-  signupBtn: {
-    width: "100%",
-    padding: 16,
-    background: "#ff2d55",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 10,
-    fontSize: 18,
-    fontWeight: "bold",
-    cursor: "pointer",
-    marginBottom: 12
-  },
-
-  loginBtn: {
-    width: "100%",
-    padding: 14,
-    background: "#4f46e5",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: "bold",
-    cursor: "pointer"
-  },
-
-  swipeCard: {
-    background: "#ffffff",
-    borderRadius: 16,
-    padding: 14,
-    marginTop: 20
-  },
-
-  image: {
-    width: "100%",
-    borderRadius: 14,
-    marginBottom: 10
-  },
-
-  paywall: {
-    background: "#ffffff",
-    padding: 20,
-    borderRadius: 14,
-    marginTop: 20
-  },
-
-  matchesBox: {
-    background: "#ffffff",
-    padding: 20,
-    borderRadius: 14,
-    marginTop: 20
-  },
-
-  matchBtn: {
-    width: "100%",
-    padding: 12,
-    marginBottom: 10
-  },
-
-  chatBox: {
-    background: "#ffffff",
-    padding: 20,
-    borderRadius: 14,
-    marginTop: 20
-  },
-
-  messages: {
-    maxHeight: 250,
-    overflowY: "auto",
-    marginBottom: 12
-  },
-
-  msg: {
-    background: "#f3f4f6",
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 8
-  },
-
-  popupOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-
-  popup: {
-    background: "#ffffff",
-    padding: 30,
-    borderRadius: 16
-  }
+  app: { minHeight: "100vh", background: "#f3f4f6", padding: 20, fontFamily: "Arial" },
+  container: { maxWidth: 450, margin: "0 auto" },
+  logo: { textAlign: "center", marginBottom: 20, color: "#111827" },
+  card: { background: "#fff", padding: 20, borderRadius: 14 },
+  input: { width: "100%", padding: 14, marginBottom: 12 },
+  signupBtn: { width: "100%", padding: 16, background: "#ff2d55", color: "#fff" },
+  loginBtn: { width: "100%", padding: 14, background: "#4f46e5", color: "#fff" },
+  swipeCard: { background: "#fff", padding: 14, marginTop: 20 },
+  image: { width: "100%" },
+  paywall: { background: "#fff", padding: 20, marginTop: 20 }
 }
-```
