@@ -1,16 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-"use client"
-
-import { useEffect, useState } from "react"
 import { getApps, initializeApp } from "firebase/app"
 
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
-} from "firebase/auth"
 import {
   getAuth,
   createUserWithEmailAndPassword,
@@ -27,7 +19,6 @@ import {
   doc,
   onSnapshot
 } from "firebase/firestore"
-
 import {
   getStorage,
   ref,
