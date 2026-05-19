@@ -32,14 +32,13 @@ import { motion, useMotionValue, useTransform } from "framer-motion"
 /* ---------------- FIREBASE ---------------- */
 
 const firebaseConfig = {
-  apiKey: "AIzaSyADc9iLS4oeubdeDfnccCiUN5gzzzLxeg",
+  apiKey: "AIzaSyD4SGww_8LpAq_0fHYz2zifvOlndh7m90Y",
   authDomain: "mingle-bff25.firebaseapp.com",
   projectId: "mingle-bff25",
   storageBucket: "mingle-bff25.appspot.com",
   messagingSenderId: "837882207909",
-  appId: "1:837882207909:web:3841ee712f9a0da4cd774c"
+  appId: "1:837882207909:web:d36f6ea39fe66f8dcd774c"
 }
-
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 
 const auth = getAuth(app)
