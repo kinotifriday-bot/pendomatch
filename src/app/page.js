@@ -37,7 +37,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyADc9iLS4oeubdeDfnccCiUN5gzzzLxeg",
   authDomain: "mingle-bff25.firebaseapp.com",
   projectId: "mingle-bff25",
-  storageBucket: "mingle-bff25.firebasestorage.app",
+ storageBucket: "mingle-bff25.appspot.com",
   messagingSenderId: "837882207909",
   appId: "1:837882207909:web:3841ee712f9a0da4cd774c"
 }
@@ -106,6 +106,10 @@ export default function Page() {
   }
 
   async function login() {
+  if (!email || !password) {
+  alert("Email and password required")
+  return
+}
     try {
       const res = await signInWithEmailAndPassword(
         auth,
