@@ -121,9 +121,10 @@ export default function Page() {
 
       loadProfiles()
       loadMatches()
-    } catch (err) {
-      alert(err.message)
-    }
+   catch (err) {
+  console.log("LOGIN ERROR:", err.code, err.message)
+  alert(err.message)
+}
   }
 
   async function checkSubscription(uid) {
