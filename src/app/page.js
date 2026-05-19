@@ -1,7 +1,9 @@
+```jsx
 "use client"
 
 import { useEffect, useState } from "react"
 import { initializeApp } from "firebase/app"
+
 import {
   getAuth,
   createUserWithEmailAndPassword,
@@ -13,13 +15,23 @@ import {
   collection,
   addDoc,
   getDocs,
-  doc,
   setDoc,
-  getDoc
+  getDoc,
+  doc,
+  onSnapshot
 } from "firebase/firestore"
+
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "firebase/storage"
 
 import { useSwipeable } from "react-swipeable"
 import { motion, useMotionValue, useTransform } from "framer-motion"
+
+/* ---------------- FIREBASE ---------------- */
 
 const firebaseConfig = {
   apiKey: "AIzaSyADc9iLS4oeubdeDfnccCiUN5gzzzLxeg",
@@ -31,91 +43,203 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
+
 const auth = getAuth(app)
 const db = getFirestore(app)
+const storage = getStorage(app)
+
+/* ---------------- PAGE ---------------- */
 
 export default function Page() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [user, setUser] = useState(null)
 
+  const [step, setStep] = useState("auth")
+
   const [profiles, setProfiles] = useState([])
   const [index, setIndex] = useState(0)
 
-  const [swipes, setSwipes] = useState(0)
-  const [limit] = useState(5)
+  const [matches, setMatches] = useState([])
+  const [activeChat, setActiveChat] = useState(null)
 
-  const [isPremium, setIsPremium] = useState(false)
-  const [status, setStatus] = useState("")
+  const [messages, setMessages] = useState([])
+  const [message, setMessage] = useState("")
 
-  const [matchPopup, setMatchPopup] = useState(null)
+  const [isSubscribed, setIsSubscribed] = useState(false)
+
+  const [matchPopup, setMatchPopup] = useState("")
+
+  const [profileData, setProfileData] = useState({
+    name: "",
+    age: "",
+    gender: "",
+    bio: "",
+    lookingFor: ""
+  })
+
+  const [photoFile, setPhotoFile] = useState(null)
 
   const x = useMotionValue(0)
-  const rotate = useTransform(x, [-200, 200], [-10, 10])
-  const likeOpacity = useTransform(x, [0, 120], [0, 1])
-  const passOpacity = useTransform(x, [-120, 0], [1, 0])
+  const rotate = useTransform(x, [-200, 200], [-12, 12])
 
-  useEffect(() => {
-    loadProfiles()
-  }, [])
-
-  async function loadProfiles() {
-    const snap = await getDocs(collection(db, "profiles"))
-    setProfiles(snap.docs.map(d => d.data()))
-  }
+  /* ---------------- AUTH ---------------- */
 
   async function signup() {
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, password)
+      const res = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      )
+
       setUser(res.user)
 
       await setDoc(doc(db, "subscriptions", res.user.uid), {
         premium: false
       })
 
-      setIsPremium(false)
-      setStatus("Account created")
+      setStep("profile")
     } catch (err) {
-      setStatus(err.message)
+      alert(err.message)
     }
   }
 
   async function login() {
     try {
-      const res = await signInWithEmailAndPassword(auth, email, password)
+      const res = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      )
+
       setUser(res.user)
 
-      const subRef = await getDoc(doc(db, "subscriptions", res.user.uid))
+      await checkSubscription(res.user.uid)
 
-      if (subRef.exists()) {
-        setIsPremium(subRef.data().premium === true)
-      } else {
-        setIsPremium(false)
-      }
+      setStep("app")
 
-      setStatus("Logged in")
+      loadProfiles()
+      loadMatches()
     } catch (err) {
-      setStatus(err.message)
+      alert(err.message)
     }
   }
 
-  function canSwipe() {
-    return isPremium || swipes < limit
+  async function checkSubscription(uid) {
+    const snap = await getDoc(doc(db, "subscriptions", uid))
+
+    if (snap.exists()) {
+      setIsSubscribed(snap.data().premium)
+    }
   }
 
+  /* ---------------- PROFILE ---------------- */
+
+  async function uploadPhoto(file) {
+    const storageRef = ref(storage, `profiles/${user.uid}`)
+
+    await uploadBytes(storageRef, file)
+
+    return await getDownloadURL(storageRef)
+  }
+
+  async function saveProfile() {
+    try {
+      let photoURL = ""
+
+      if (photoFile) {
+        photoURL = await uploadPhoto(photoFile)
+      }
+
+      await setDoc(doc(db, "profiles", user.uid), {
+        uid: user.uid,
+        ...profileData,
+        photo: photoURL
+      })
+
+      loadProfiles()
+
+      setStep("app")
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  /* ---------------- LOADERS ---------------- */
+
+  async function loadProfiles() {
+    const snap = await getDocs(collection(db, "profiles"))
+
+    const data = snap.docs.map((d) => d.data())
+
+    setProfiles(data.filter((p) => p.uid !== user?.uid))
+  }
+
+  async function loadMatches() {
+    const snap = await getDocs(collection(db, "matches"))
+
+    const data = snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data()
+    }))
+
+    setMatches(
+      data.filter((m) => m.users.includes(user?.uid))
+    )
+  }
+
+  /* ---------------- CHAT ---------------- */
+
+  useEffect(() => {
+    if (!activeChat) return
+
+    const unsub = onSnapshot(
+      doc(db, "chats", activeChat),
+      (snap) => {
+        if (snap.exists()) {
+          setMessages(snap.data().messages || [])
+        }
+      }
+    )
+
+    return () => unsub()
+  }, [activeChat])
+
+  async function sendMessage() {
+    if (!message.trim()) return
+
+    const chatRef = doc(db, "chats", activeChat)
+
+    const snap = await getDoc(chatRef)
+
+    const oldMessages = snap.data()?.messages || []
+
+    await setDoc(chatRef, {
+      ...snap.data(),
+      messages: [
+        ...oldMessages,
+        {
+          text: message,
+          sender: user.uid,
+          createdAt: Date.now()
+        }
+      ]
+    })
+
+    setMessage("")
+  }
+
+  /* ---------------- MATCHING ---------------- */
+
+  const current = profiles[index]
+
   function nextProfile() {
-    setIndex(i => i + 1)
+    setIndex((prev) => prev + 1)
     x.set(0)
   }
 
   async function likeProfile(target) {
-    if (!canSwipe()) {
-      setStatus("Upgrade required")
-      return
-    }
-
-    if (!target || !user) return
-
     await addDoc(collection(db, "likes"), {
       from: user.uid,
       to: target.uid
@@ -123,244 +247,415 @@ export default function Page() {
 
     const snap = await getDocs(collection(db, "likes"))
 
-    const matchFound = snap.docs.some(d =>
-      d.data().from === target.uid &&
-      d.data().to === user.uid
+    const matchExists = snap.docs.some(
+      (d) =>
+        d.data().from === target.uid &&
+        d.data().to === user.uid
     )
 
-    if (matchFound) {
-      await addDoc(collection(db, "matches"), {
+    if (matchExists) {
+      const chatRef = await addDoc(collection(db, "chats"), {
         users: [user.uid, target.uid],
-        createdAt: Date.now()
+        messages: []
       })
 
-      setMatchPopup(target.name || "Someone")
+      await addDoc(collection(db, "matches"), {
+        users: [user.uid, target.uid],
+        chatId: chatRef.id
+      })
+
+      setMatchPopup(`You matched with ${target.name}`)
+
+      loadMatches()
     }
 
-    setSwipes(s => s + 1)
-    nextProfile()
-  }
-
-  function passProfile() {
-    setSwipes(s => s + 1)
     nextProfile()
   }
 
   const handlers = useSwipeable({
-    onSwipedLeft: () => passProfile(),
+    onSwipedLeft: () => nextProfile(),
     onSwipedRight: () => likeProfile(current),
     trackMouse: true
   })
 
-  const current = profiles[index]
-  const next = profiles[index + 1]
-
-  async function upgradeToPremium() {
-    window.location.href = "https://pay.pesapal.com"
-  }
+  /* ---------------- UI ---------------- */
 
   return (
-    <main style={styles.bg}>
+    <div style={styles.app}>
+      <div style={styles.container}>
+        <h1 style={styles.logo}>PendoMatch</h1>
 
-      {matchPopup && (
-        <div style={styles.overlay}>
-          <div style={styles.popup}>
-            <h2>💘 It's a Match!</h2>
-            <p>You matched with {matchPopup}</p>
-            <button onClick={() => setMatchPopup(null)} style={btn}>
-              Continue
+        {/* AUTH */}
+
+        {step === "auth" && (
+          <div style={styles.card}>
+            <input
+              type="email"
+              placeholder="Enter Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input}
+            />
+
+            <input
+              type="password"
+              placeholder="Create Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+            />
+
+            <button
+              onClick={signup}
+              style={styles.signupBtn}
+            >
+              SIGN UP
+            </button>
+
+            <button
+              onClick={login}
+              style={styles.loginBtn}
+            >
+              Login
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      <div style={styles.card}>
+        {/* PROFILE */}
 
-        <h1 style={{ textAlign: "center", color: "#7b2ff7" }}>
-          PendoMatch 💘
-        </h1>
+        {step === "profile" && (
+          <div style={styles.card}>
+            <h2>Create Profile</h2>
 
-        {!user ? (
+            <input
+              placeholder="Name"
+              style={styles.input}
+              onChange={(e) =>
+                setProfileData({
+                  ...profileData,
+                  name: e.target.value
+                })
+              }
+            />
+
+            <input
+              placeholder="Age"
+              style={styles.input}
+              onChange={(e) =>
+                setProfileData({
+                  ...profileData,
+                  age: e.target.value
+                })
+              }
+            />
+
+            <input
+              placeholder="Gender"
+              style={styles.input}
+              onChange={(e) =>
+                setProfileData({
+                  ...profileData,
+                  gender: e.target.value
+                })
+              }
+            />
+
+            <input
+              placeholder="Looking For"
+              style={styles.input}
+              onChange={(e) =>
+                setProfileData({
+                  ...profileData,
+                  lookingFor: e.target.value
+                })
+              }
+            />
+
+            <textarea
+              placeholder="Bio"
+              style={styles.textarea}
+              onChange={(e) =>
+                setProfileData({
+                  ...profileData,
+                  bio: e.target.value
+                })
+              }
+            />
+
+            <input
+              type="file"
+              onChange={(e) =>
+                setPhotoFile(e.target.files[0])
+              }
+            />
+
+            <button
+              style={styles.signupBtn}
+              onClick={saveProfile}
+            >
+              Save Profile
+            </button>
+          </div>
+        )}
+
+        {/* APP */}
+
+        {step === "app" && (
           <>
-            <input placeholder="Email" value={email}
-              onChange={e => setEmail(e.target.value)} style={input} />
+            {!isSubscribed && (
+              <div style={styles.paywall}>
+                <h2>Subscription Required</h2>
 
-            <input placeholder="Password" type="password"
-              value={password} onChange={e => setPassword(e.target.value)} style={input} />
+                <p>
+                  Subscribe to unlock messaging and
+                  premium features.
+                </p>
 
-            <button onClick={login} style={btn}>Login</button>
-            <button onClick={signup} style={btn2}>Sign Up</button>
-          </>
-        ) : (
-          <>
-            <p style={{ textAlign: "center" }}>
-              {isPremium ? "Premium" : "Free"} • Swipes {swipes}/{limit}
-            </p>
-
-            {/* CARD STACK */}
-            <div style={{ position: "relative", height: "420px" }}>
-
-              {next && (
-                <div style={{
-                  ...profileCard,
-                  position: "absolute",
-                  top: 10,
-                  left: 0,
-                  right: 0,
-                  transform: "scale(0.95)",
-                  opacity: 0.4,
-                  zIndex: 0
-                }}>
-                  {next.photo && <img src={next.photo} style={img} />}
-                  <h3>{next.name}</h3>
-                </div>
-              )}
-
-              {current && (
-                <motion.div
-                  {...handlers}
-                  style={{
-                    ...profileCard,
-                    position: "relative",
-                    zIndex: 2,
-                    x,
-                    rotate
-                  }}
-                  whileDrag={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-
-                  {/* Swipe indicators */}
-                  <motion.div style={{
-                    position: "absolute",
-                    left: 20,
-                    top: 20,
-                    color: "green",
-                    fontWeight: "bold",
-                    opacity: likeOpacity
-                  }}>
-                    LIKE
-                  </motion.div>
-
-                  <motion.div style={{
-                    position: "absolute",
-                    right: 20,
-                    top: 20,
-                    color: "red",
-                    fontWeight: "bold",
-                    opacity: passOpacity
-                  }}>
-                    PASS
-                  </motion.div>
-
-                  {current.photo && (
-                    <img src={current.photo} style={img} />
-                  )}
-
-                  <h3>{current.name}</h3>
-                  <p>{current.age} • {current.gender}</p>
-                  <p>{current.bio}</p>
-
-                </motion.div>
-              )}
-
-            </div>
-
-            {!isPremium && swipes >= limit && (
-              <button onClick={upgradeToPremium} style={upgradeBtn}>
-                Upgrade to Premium
-              </button>
+                <button style={styles.signupBtn}>
+                  Subscribe
+                </button>
+              </div>
             )}
 
-            <p style={{ textAlign: "center", fontSize: "12px", color: "#999" }}>
-              {status}
-            </p>
+            {isSubscribed && current && (
+              <motion.div
+                {...handlers}
+                style={{
+                  ...styles.swipeCard,
+                  x,
+                  rotate
+                }}
+              >
+                <img
+                  src={current.photo}
+                  alt=""
+                  style={styles.image}
+                />
+
+                <h2>{current.name}</h2>
+
+                <p>{current.bio}</p>
+              </motion.div>
+            )}
+
+            {/* MATCHES */}
+
+            <div style={styles.matchesBox}>
+              <h3>Matches</h3>
+
+              {matches.map((m) => (
+                <button
+                  key={m.id}
+                  style={styles.matchBtn}
+                  onClick={() =>
+                    setActiveChat(m.chatId)
+                  }
+                >
+                  Open Chat
+                </button>
+              ))}
+            </div>
+
+            {/* CHAT */}
+
+            {activeChat && (
+              <div style={styles.chatBox}>
+                <h3>Chat</h3>
+
+                <div style={styles.messages}>
+                  {messages.map((m, i) => (
+                    <div key={i} style={styles.msg}>
+                      {m.text}
+                    </div>
+                  ))}
+                </div>
+
+                <input
+                  placeholder="Type message"
+                  value={message}
+                  onChange={(e) =>
+                    setMessage(e.target.value)
+                  }
+                  style={styles.input}
+                />
+
+                <button
+                  onClick={sendMessage}
+                  style={styles.signupBtn}
+                >
+                  Send
+                </button>
+              </div>
+            )}
           </>
         )}
 
+        {/* MATCH POPUP */}
+
+        {matchPopup && (
+          <div style={styles.popupOverlay}>
+            <div style={styles.popup}>
+              <h2>{matchPopup}</h2>
+
+              <button
+                style={styles.signupBtn}
+                onClick={() =>
+                  setMatchPopup("")
+                }
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </main>
+    </div>
   )
 }
 
+/* ---------------- STYLES ---------------- */
+
 const styles = {
-  bg: {
+  app: {
     minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg,#ff4d6d,#7b2ff7,#00c6ff)",
-    fontFamily: "system-ui"
+    background: "#f3f4f6",
+    padding: 20,
+    fontFamily: "Arial"
   },
+
+  container: {
+    maxWidth: 450,
+    margin: "0 auto"
+  },
+
+  logo: {
+    textAlign: "center",
+    marginBottom: 20,
+    color: "#111827"
+  },
+
   card: {
-    width: "100%",
-    maxWidth: "420px",
-    background: "white",
-    borderRadius: "20px",
-    padding: "20px"
+    background: "#ffffff",
+    padding: 20,
+    borderRadius: 14,
+    boxShadow: "0 0 10px rgba(0,0,0,0.1)"
   },
-  overlay: {
+
+  input: {
+    width: "100%",
+    padding: 14,
+    marginBottom: 12,
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    background: "#ffffff",
+    color: "#000000",
+    fontSize: 16,
+    outline: "none"
+  },
+
+  textarea: {
+    width: "100%",
+    minHeight: 100,
+    padding: 14,
+    marginBottom: 12,
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    background: "#ffffff",
+    color: "#000000",
+    fontSize: 16
+  },
+
+  signupBtn: {
+    width: "100%",
+    padding: 16,
+    background: "#ff2d55",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 10,
+    fontSize: 18,
+    fontWeight: "bold",
+    cursor: "pointer",
+    marginBottom: 12
+  },
+
+  loginBtn: {
+    width: "100%",
+    padding: 14,
+    background: "#4f46e5",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 10,
+    fontSize: 16,
+    fontWeight: "bold",
+    cursor: "pointer"
+  },
+
+  swipeCard: {
+    background: "#ffffff",
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 20
+  },
+
+  image: {
+    width: "100%",
+    borderRadius: 14,
+    marginBottom: 10
+  },
+
+  paywall: {
+    background: "#ffffff",
+    padding: 20,
+    borderRadius: 14,
+    marginTop: 20
+  },
+
+  matchesBox: {
+    background: "#ffffff",
+    padding: 20,
+    borderRadius: 14,
+    marginTop: 20
+  },
+
+  matchBtn: {
+    width: "100%",
+    padding: 12,
+    marginBottom: 10
+  },
+
+  chatBox: {
+    background: "#ffffff",
+    padding: 20,
+    borderRadius: 14,
+    marginTop: 20
+  },
+
+  messages: {
+    maxHeight: 250,
+    overflowY: "auto",
+    marginBottom: 12
+  },
+
+  msg: {
+    background: "#f3f4f6",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8
+  },
+
+  popupOverlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.7)",
+    background: "rgba(0,0,0,0.5)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center"
   },
+
   popup: {
-    background: "white",
-    padding: "20px",
-    borderRadius: "15px",
-    textAlign: "center"
+    background: "#ffffff",
+    padding: 30,
+    borderRadius: 16
   }
 }
-
-const input = {
-  width: "100%",
-  padding: "10px",
-  marginBottom: "10px",
-  borderRadius: "10px",
-  border: "1px solid #ddd"
-}
-
-const btn = {
-  width: "100%",
-  padding: "10px",
-  background: "#7b2ff7",
-  color: "white",
-  border: "none",
-  borderRadius: "10px"
-}
-
-const btn2 = {
-  width: "100%",
-  padding: "10px",
-  background: "#eee",
-  border: "none",
-  borderRadius: "10px",
-  marginTop: "5px"
-}
-
-const profileCard = {
-  padding: "15px",
-  border: "1px solid #eee",
-  borderRadius: "15px",
-  marginTop: "10px",
-  background: "white"
-}
-
-const img = {
-  width: "100%",
-  borderRadius: "12px",
-  marginBottom: "10px"
-}
-
-const upgradeBtn = {
-  width: "100%",
-  padding: "12px",
-  background: "#ffb703",
-  border: "none",
-  borderRadius: "10px",
-  fontWeight: "bold",
-  marginTop: "15px"
-}
+```
