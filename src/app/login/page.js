@@ -1,27 +1,59 @@
 "use client";
 import { useState } from "react";
 import { auth } from "../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [message, setMessage] = useState({ text: "", type: "" }); // Handles both errors and success alerts
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setMessage({ text: "", type: "" });
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
     } catch (err) {
-      setError("Credentials don't match our database records.");
+      setMessage({ 
+        text: "We couldn't find a match for that email or password. Please verify your details.", 
+        type: "error" 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setMessage({ 
+        text: "Please type your email address into the input field first so we know where to send the recovery link!", 
+        type: "error" 
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage({ text: "", type: "" });
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setMessage({ 
+        text: "💌 Reset link dispatched! Check your email inbox (and spam folder) to update your password.", 
+        type: "success" 
+      });
+    } catch (err) {
+      if (err.code === "auth/user-not-found") {
+        setMessage({ text: "This email address is not registered on PendoMatch.", type: "error" });
+      } else {
+        setMessage({ text: "Failed to send password reset link. Please try again.", type: "error" });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -58,9 +90,14 @@ export default function LoginPage() {
           <p className="text-xs font-semibold text-pink-600 tracking-wider uppercase">PendoMatch.com</p>
         </div>
 
-        {error && (
-          <div className="bg-rose-50 border-l-4 border-rose-500 p-3 rounded-r-xl text-xs text-rose-700">
-            <p>{error}</p>
+        {/* Unified Status Message Banner */}
+        {message.text && (
+          <div className={`p-3 rounded-xl text-xs font-medium border-l-4 ${
+            message.type === "success" 
+              ? "bg-emerald-50 border-emerald-500 text-emerald-800" 
+              : "bg-rose-50 border-rose-500 text-rose-700"
+          }`}>
+            <p>{message.text}</p>
           </div>
         )}
 
@@ -81,9 +118,19 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Password
-            </label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isLoading}
+                className="text-[11px] font-bold text-rose-500 hover:text-purple-600 transition outline-none"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <input
               type="password"
               required
@@ -98,9 +145,9 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-95 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg transition text-sm"
+            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-95 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg transition text-sm tracking-wide"
           >
-            {isLoading ? "Signing in..." : "ENTER PENDOMATCH 💖"}
+            {isLoading ? "Processing..." : "ENTER PENDOMATCH 💖"}
           </button>
         </form>
 
