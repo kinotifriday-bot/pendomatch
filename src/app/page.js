@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { auth, db, storage } from "../firebase"
+import { useState, useEffect } from "react"
+
+import { auth, db, storage } from "./firebase"
 
 import {
-  getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from "firebase/auth"
 
 import {
-  getFirestore,
   collection,
   addDoc,
   getDocs,
@@ -19,32 +18,15 @@ import {
   doc,
   onSnapshot
 } from "firebase/firestore"
+
 import {
-  getStorage,
   ref,
   uploadBytes,
   getDownloadURL
 } from "firebase/storage"
 
 import { useSwipeable } from "react-swipeable"
-import { motion, useMotionValue, useTransform } from "framer-motion"
-
-/* ---------------- FIREBASE ---------------- */
-
-const firebaseConfig = {
-  apiKey: "AIzaSyD4SGww_8LpAq_0fHYz2zifvOlndh7m90Y",
-  authDomain: "mingle-bff25.firebaseapp.com",
-  projectId: "mingle-bff25",
-  storageBucket: "mingle-bff25.firebasestorage.app",
-  messagingSenderId: "837882207909",
-  appId: "1:837882207909:web:d36f6ea39fe66f8dcd774c"
-};
-
-const auth = getAuth(app)
-const db = getFirestore(app)
-const storage = getStorage(app)
-
-/* ---------------- PAGE ---------------- */
+import { motion, useMotionValue, useTransform } from "framer-motion"/* ---------------- PAGE ---------------- */
 
 export default function Page() {
   const [email, setEmail] = useState("")
