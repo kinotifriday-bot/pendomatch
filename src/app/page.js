@@ -1,385 +1,111 @@
-"use client"
+"use client";
+import { useState } from "react";
+import { auth } from "./firebase"; // Inside the same app folder
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-import { useState, useEffect } from "react"
+export default function RegisterPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
-import { auth, db, storage } from "./firebase"
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
-} from "firebase/auth"
-
-import {
-  collection,
-  addDoc,
-  getDocs,
-  setDoc,
-  getDoc,
-  doc,
-  onSnapshot
-} from "firebase/firestore"
-
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL
-} from "firebase/storage"
-
-import { useSwipeable } from "react-swipeable"
-import { motion, useMotionValue, useTransform } from "framer-motion"/* ---------------- PAGE ---------------- */
-
-export default function Page() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [user, setUser] = useState(null)
-
-  const [step, setStep] = useState("auth")
-
-  const [profiles, setProfiles] = useState([])
-  const [index, setIndex] = useState(0)
-
-  const [matches, setMatches] = useState([])
-  const [activeChat, setActiveChat] = useState(null)
-
-  const [messages, setMessages] = useState([])
-  const [message, setMessage] = useState("")
-
-  const [isSubscribed, setIsSubscribed] = useState(false)
-
-  const [matchPopup, setMatchPopup] = useState("")
-
-  const [profileData, setProfileData] = useState({
-    name: "",
-    age: "",
-    gender: "",
-    bio: "",
-    lookingFor: ""
-  })
-
-  const [photoFile, setPhotoFile] = useState(null)
-
-  const x = useMotionValue(0)
-  const rotate = useTransform(x, [-200, 200], [-12, 12])
-
-  /* ---------------- AUTH ---------------- */
-
-  async function signup() {
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, password)
-
-      setUser(res.user)
-
-      await setDoc(doc(db, "subscriptions", res.user.uid), {
-        premium: false
-      })
-
-      setStep("profile")
+      await createUserWithEmailAndPassword(auth, email, password);
+      router.push("/dashboard");
     } catch (err) {
-      console.log(err)
-      alert(err.message)
-    }
-  }
-
-  async function login() {
-    if (!email || !password) {
-      alert("Email and password required")
-      return
-    }
-
-    try {
-      const res = await signInWithEmailAndPassword(auth, email, password)
-
-      setUser(res.user)
-
-      await checkSubscription(res.user.uid)
-
-      setStep("app")
-
-      loadProfiles()
-      loadMatches()
-    } catch (err) {
-      console.log("LOGIN ERROR:", err.code, err.message)
-      alert(err.message)
-    }
-  }
-
-  async function checkSubscription(uid) {
-    try {
-      const snap = await getDoc(doc(db, "subscriptions", uid))
-
-      if (snap.exists()) {
-        setIsSubscribed(snap.data().premium)
+      switch (err.code) {
+        case "auth/email-already-in-use":
+          setError("This email address is already registered.");
+          break;
+        case "auth/invalid-email":
+          setError("Please enter a valid email address.");
+          break;
+        case "auth/weak-password":
+          setError("Password should be at least 6 characters long.");
+          break;
+        default:
+          setError("An unexpected error occurred. Please try again.");
       }
-    } catch (e) {
-      console.log("subscription error", e)
+    } finally {
+      setIsLoading(false);
     }
-  }
-
-  /* ---------------- PROFILE ---------------- */
-
-  async function uploadPhoto(file) {
-    const storageRef = ref(storage, "profiles/" + user.uid)
-    await uploadBytes(storageRef, file)
-    return await getDownloadURL(storageRef)
-  }
-
-  async function saveProfile() {
-    try {
-      let photoURL = ""
-
-      if (photoFile) {
-        photoURL = await uploadPhoto(photoFile)
-      }
-
-      await setDoc(doc(db, "profiles", user.uid), {
-        uid: user.uid,
-        ...profileData,
-        photo: photoURL
-      })
-
-      loadProfiles()
-      setStep("app")
-    } catch (err) {
-      console.log(err)
-      alert(err.message)
-    }
-  }
-
-  /* ---------------- LOADERS ---------------- */
-
-  async function loadProfiles() {
-    try {
-      const snap = await getDocs(collection(db, "profiles"))
-      const data = snap.docs.map((d) => d.data())
-      setProfiles(data.filter((p) => p.uid !== user?.uid))
-    } catch (e) {
-      console.log(e)
-    }
-  }
-
-  async function loadMatches() {
-    try {
-      const snap = await getDocs(collection(db, "matches"))
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data()
-      }))
-
-      setMatches(
-        data.filter((m) => m.users.includes(user?.uid))
-      )
-    } catch (e) {
-      console.log(e)
-    }
-  }
-
-  /* ---------------- CHAT ---------------- */
-
-  useEffect(() => {
-    if (!activeChat) return
-
-    const unsub = onSnapshot(
-      doc(db, "chats", activeChat),
-      (snap) => {
-        if (snap.exists()) {
-          setMessages(snap.data().messages || [])
-        }
-      }
-    )
-
-    return () => unsub()
-  }, [activeChat])
-
-  async function sendMessage() {
-    if (!message.trim() || !activeChat) return
-
-    const chatRef = doc(db, "chats", activeChat)
-    const snap = await getDoc(chatRef)
-
-    const oldMessages = snap.data()?.messages || []
-
-    await setDoc(chatRef, {
-      ...snap.data(),
-      messages: [
-        ...oldMessages,
-        {
-          text: message,
-          sender: user.uid,
-          createdAt: Date.now()
-        }
-      ]
-    })
-
-    setMessage("")
-  }
-
-  /* ---------------- MATCHING ---------------- */
-
-  const current = profiles[index]
-
-  function nextProfile() {
-    setIndex((prev) => prev + 1)
-    x.set(0)
-  }
-
-  async function likeProfile(target) {
-    await addDoc(collection(db, "likes"), {
-      from: user.uid,
-      to: target.uid
-    })
-
-    const snap = await getDocs(collection(db, "likes"))
-
-    const matchExists = snap.docs.some(
-      (d) =>
-        d.data().from === target.uid &&
-        d.data().to === user.uid
-    )
-
-    if (matchExists) {
-      const chatRef = await addDoc(collection(db, "chats"), {
-        users: [user.uid, target.uid],
-        messages: []
-      })
-
-      await addDoc(collection(db, "matches"), {
-        users: [user.uid, target.uid],
-        chatId: chatRef.id
-      })
-
-      setMatchPopup(`You matched with ${target.name}`)
-      loadMatches()
-    }
-
-    nextProfile()
-  }
-
-  const handlers = useSwipeable({
-    onSwipedLeft: () => nextProfile(),
-    onSwipedRight: () => current && likeProfile(current),
-    trackMouse: true
-  })
-
-  /* ---------------- UI ---------------- */
+  };
 
   return (
-    <div style={styles.app}>
-      <div style={styles.container}>
-        <h1 style={styles.logo}>PendoMatch</h1>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+        
+        <div className="text-center">
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Create your account</h2>
+          <p className="mt-2 text-sm text-slate-500">Welcome to Mingle. Let's get you set up.</p>
+        </div>
 
-        {step === "auth" && (
-          <div style={styles.card}>
-            <input
-              type="email"
-              placeholder="Enter Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
-            />
-
-            <input
-              type="password"
-              placeholder="Create Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-            />
-
-            <button onClick={signup} style={styles.signupBtn}>
-              SIGN UP
-            </button>
-
-            <button onClick={login} style={styles.loginBtn}>
-              Login
-            </button>
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md text-sm text-red-700">
+            <p className="font-medium">Registration Failed</p>
+            <p>{error}</p>
           </div>
         )}
 
-        {step === "profile" && (
-          <div style={styles.card}>
-            <h2>Create Profile</h2>
+        <form className="mt-8 space-y-6" onSubmit={handleSignup}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Email Address
+              </label>
+              <input
+                type="email"
+                required
+                disabled={isLoading}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-slate-50"
+                placeholder="name@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                disabled={isLoading}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-slate-50"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
 
-            <input
-              placeholder="Name"
-              style={styles.input}
-              onChange={(e) =>
-                setProfileData({ ...profileData, name: e.target.value })
-              }
-            />
-
-            <input
-              placeholder="Age"
-              style={styles.input}
-              onChange={(e) =>
-                setProfileData({ ...profileData, age: e.target.value })
-              }
-            />
-
-            <input
-              placeholder="Gender"
-              style={styles.input}
-              onChange={(e) =>
-                setProfileData({ ...profileData, gender: e.target.value })
-              }
-            />
-
-            <input
-              placeholder="Looking For"
-              style={styles.input}
-              onChange={(e) =>
-                setProfileData({ ...profileData, lookingFor: e.target.value })
-              }
-            />
-
-            <textarea
-              placeholder="Bio"
-              style={styles.textarea}
-              onChange={(e) =>
-                setProfileData({ ...profileData, bio: e.target.value })
-              }
-            />
-
-            <input type="file" onChange={(e) => setPhotoFile(e.target.files[0])} />
-
-            <button style={styles.signupBtn} onClick={saveProfile}>
-              Save Profile
+          <div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="group relative flex w-full justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:bg-blue-400 items-center gap-2"
+            >
+              {isLoading ? "Creating account..." : "Sign up"}
             </button>
           </div>
-        )}
+        </form>
 
-        {step === "app" && (
-          <>
-            {!isSubscribed && (
-              <div style={styles.paywall}>
-                <h2>Subscription Required</h2>
-              </div>
-            )}
+        <p className="text-center text-sm text-slate-600">
+          Already have an account?{" "}
+          <Link href="/login" className="font-semibold text-blue-600 hover:text-blue-500 transition">
+            Sign in
+          </Link>
+        </p>
 
-            {isSubscribed && current && (
-              <motion.div {...handlers} style={{ ...styles.swipeCard, x, rotate }}>
-                <img src={current.photo} style={styles.image} />
-                <h2>{current.name}</h2>
-                <p>{current.bio}</p>
-              </motion.div>
-            )}
-          </>
-        )}
       </div>
     </div>
-  )
-}
-
-/* ---------------- STYLES ---------------- */
-
-const styles = {
-  app: { minHeight: "100vh", background: "#f3f4f6", padding: 20, fontFamily: "Arial" },
-  container: { maxWidth: 450, margin: "0 auto" },
-  logo: { textAlign: "center", marginBottom: 20, color: "#111827" },
-  card: { background: "#fff", padding: 20, borderRadius: 14 },
-  input: { width: "100%", padding: 14, marginBottom: 12 },
-  signupBtn: { width: "100%", padding: 16, background: "#ff2d55", color: "#fff" },
-  loginBtn: { width: "100%", padding: 14, background: "#4f46e5", color: "#fff" },
-  swipeCard: { background: "#fff", padding: 14, marginTop: 20 },
-  image: { width: "100%" },
-  paywall: { background: "#fff", padding: 20, marginTop: 20 }
+  );
 }
