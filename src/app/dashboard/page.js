@@ -1,62 +1,67 @@
 "use client";
 import { useEffect, useState } from "react";
-import { auth, db } from "../firebase"; // Verify this points cleanly to your centralized firebase configuration file
+import { auth, db } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, collection, addDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({ tier: "free", displayName: "PendoMatch Member" });
+  const [profile, setProfile] = useState({ tier: "free", displayName: "Member" });
   const [loading, setLoading] = useState(true);
+  
+  // Paywall & Checkout controllers
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [selectedTier, setSelectedTier] = useState(null);
   const [transactionCode, setTransactionCode] = useState("");
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
-  const [selectedTier, setSelectedTier] = useState(null);
-  const router = useRouter();
 
-  const MY_PENDOMATCH_TILL = "9432101"; // Personal Buy Goods Till Number 
+  const router = useRouter();
+  const MY_PENDOMATCH_POCHI = "07XXXXXXXX (Pochi La Biashara)"; // Update with your phone/pochi info later
+
+  // Mock Discovery Feed Database Profiles for browsing enjoyability
+  const mockDatingFeed = [
+    { id: 1, name: "Angel, 24", location: "Nairobi", bio: "Architectural designer who loves fine dining, slow jazz, and intentional conversations. Looking for someone genuine. ✨", image: "💃" },
+    { id: 2, name: "Brian, 27", location: "Mombasa", bio: "Software engineer & coastal adventurer. Let's explore weekend nature trails or chat about tech and deep life goals.", image: "🕺" },
+    { id: 3, name: "Chloe, 25", location: "Kisumu", bio: "Lover of travel, commercial photography, and culinary arts. Let's connect over coffee and see where the sparks go! ☕", image: "✨" }
+  ];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        
         try {
-          // Attempt a safe read loop from your Firestore database setup
           const docRef = doc(db, "users", currentUser.uid);
           const docSnap = await getDoc(docRef);
-          
           if (docSnap && docSnap.exists()) {
             setProfile(docSnap.data());
           } else {
-            console.log("No profile document found yet. Applying default free account fallback structure.");
-            setProfile({
-              uid: currentUser.uid,
-              email: currentUser.email || "",
-              tier: "free",
-              displayName: "PendoMatch Member"
-            });
+            setProfile({ uid: currentUser.uid, email: currentUser.email || "", tier: "free", displayName: "PendoMatch Member" });
           }
-        } catch (dbError) {
-          console.error("Firestore loading block trace failure:", dbError);
-          // Defensive fallback so database read lock errors never freeze your layout screen
+        } catch (err) {
           setProfile({ tier: "free", displayName: "PendoMatch Member" });
         } finally {
-          // Absolute fail-safe execution: always shut off the loading hang screen
           setLoading(false);
         }
       } else {
         router.push("/login");
       }
     });
-
     return () => unsubscribe();
   }, [router]);
+
+  const triggerPremiumAction = () => {
+    // If user is on the free tier, trigger the paywall block smoothly
+    if (profile.tier === "free") {
+      setShowPaywall(true);
+    } else {
+      alert("🔒 Premium Feature Active! Connection channel unlocked.");
+    }
+  };
 
   const handleManualPaymentSubmit = async (e) => {
     e.preventDefault();
     if (!transactionCode || !selectedTier || !user) return;
-    
     setIsSubmittingCode(true);
     
     try {
@@ -69,78 +74,140 @@ export default function DashboardPage() {
         status: "pending_verification",
         submittedAt: new Date()
       });
-
-      alert(`💌 Code ${transactionCode.toUpperCase()} submitted successfully! Our matchmakers are verifying your payment.`);
+      alert(`💌 Code ${transactionCode.toUpperCase()} submitted! Your premium access will unlock shortly after verification.`);
       setTransactionCode("");
       setSelectedTier(null);
+      setShowPaywall(false);
     } catch (err) {
-      console.error("Error logging payment submission path:", err);
-      alert("Submission error. Please verify your internet connection connection.");
+      alert("Network error. Please try again.");
     } finally {
       setIsSubmittingCode(false);
     }
   };
 
   const tiers = [
-    { id: "free", name: "Tier 1: Free", price: "KES 0", features: ["1 Photo Upload", "Limited Profile Browsing", "1 Match Limit", "1 Active Conversation"], color: "border-slate-200 bg-white text-slate-800" },
-    { id: "basic", name: "Tier 2: Basic", price: "KES 299", features: ["Up to 4 Photos", "Expanded Profile Views", "More Messaging Actions", "Increased Match Limits"], color: "border-pink-300 bg-gradient-to-b from-pink-50/30 to-white" },
-    { id: "plus", name: "Tier 3: Plus", price: "KES 499", features: ["Up to 8 Photos", "100 Profile Views / day", "10 Active Chat Threads", "2 Hours Weekly Profile Boost"], color: "border-rose-400 bg-gradient-to-b from-rose-50/40 to-white ring-2 ring-rose-400/50" },
-    { id: "premium", name: "Tier 4: Premium", price: "KES 799", features: ["Unlimited HD Photos & Video", "Unlimited Browsing + Rewinds", "Priority Instant DM Delivery", "Global Passport Access"], color: "border-amber-400 bg-gradient-to-b from-amber-50/30 to-white" }
+    { id: "basic", name: "Tier 2: Basic", price: "KES 299", features: ["Up to 4 Photos", "Expanded Profile Views", "More Messaging Actions"], color: "bg-slate-900 border-slate-800 text-white" },
+    { id: "plus", name: "Tier 3: Plus", price: "KES 499", features: ["Up to 8 Photos", "100 Profile Views/day", "10 Active Chat Threads"], color: "bg-gradient-to-b from-rose-950 to-slate-950 border-rose-900 text-white ring-1 ring-rose-500/30" },
+    { id: "premium", name: "Tier 4: Premium", price: "KES 799", features: ["Unlimited HD Photos", "Unlimited Rewinds", "Priority Instant DM Delivery"], color: "bg-gradient-to-b from-amber-950 to-slate-950 border-amber-900 text-white ring-1 ring-amber-500/30" }
   ];
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-rose-50 via-pink-50 to-purple-50">
-        <div className="animate-bounce text-4xl mb-4">💝</div>
-        <p className="text-sm font-bold text-rose-600 tracking-wide">Syncing account setup...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950">
+        <div className="animate-pulse text-3xl mb-2">💖</div>
+        <p className="text-xs font-bold text-rose-500 tracking-widest uppercase">Syncing PendoMatch...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 text-slate-800">
-      <nav className="bg-white border-b border-rose-100 px-6 py-4 flex justify-between items-center shadow-sm">
+    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-rose-500 selection:text-white">
+      {/* Top Header Navigation Panel */}
+      <nav className="bg-slate-900/40 backdrop-blur-md border-b border-slate-900 px-6 py-4 flex justify-between items-center fixed top-0 w-full z-40">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🔥</span>
-          <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-rose-600 to-orange-500">
-            PendoMatch Workspace
+          <span className="text-xl filter drop-shadow-[0_0_8px_rgba(244,63,94,0.5)]">✨</span>
+          <h1 className="text-lg font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-rose-400">
+            PendoMatch
           </h1>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-xs font-bold bg-rose-500 text-white px-3 py-1.5 rounded-full capitalize">
+          <span className="text-[10px] font-black bg-gradient-to-r from-rose-500 to-pink-600 text-white px-3 py-1 rounded-full uppercase tracking-wider shadow-[0_0_15px_rgba(244,63,94,0.3)]">
             Plan: {profile?.tier || "free"}
           </span>
-          <button 
-            onClick={() => signOut(auth).then(() => router.push("/login"))} 
-            className="text-xs font-bold text-slate-400 hover:text-rose-600 transition"
-          >
-            Log Out
-          </button>
+          <button onClick={() => signOut(auth)} className="text-xs font-bold text-slate-500 hover:text-slate-300 transition">Log Out</button>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-6 md:p-8 space-y-10">
-        
-        {/* Dynamic Verification Collection Box Popup Overlay */}
-        {selectedTier && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white max-w-sm w-full p-6 rounded-3xl shadow-2xl border border-slate-100">
-              <h3 className="text-lg font-black text-slate-900">Unlock {selectedTier.name}</h3>
-              <p className="text-xs text-slate-500 mb-4">Price: <span className="font-bold text-rose-600">{selectedTier.price}</span></p>
+      {/* Main Browse Feed Section */}
+      <main className="max-w-md mx-auto pt-24 pb-12 px-4 space-y-6">
+        <div className="text-center space-y-1">
+          <h2 className="text-xl font-extrabold text-white">Discover Daily Sparks</h2>
+          <p className="text-xs text-slate-400">Review intentional singles active near you right now.</p>
+        </div>
+
+        {/* Dynamic Card Browsing Stack */}
+        <div className="space-y-4">
+          {mockDatingFeed.map((member) => (
+            <div key={member.id} className="bg-slate-900/60 border border-slate-900 rounded-3xl p-6 shadow-xl space-y-4 relative overflow-hidden group hover:border-slate-800 transition-all duration-300">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-rose-500/20 to-pink-500/10 rounded-2xl flex items-center justify-center text-2xl border border-rose-500/20 shadow-inner">
+                  {member.image}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    {member.name}
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  </h3>
+                  <p className="text-xs text-rose-400 font-semibold tracking-wide">{member.location}</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed font-medium">{member.bio}</p>
               
-              <div className="bg-rose-50/80 p-4 rounded-2xl mb-4 border border-rose-100 text-xs space-y-1.5">
-                <p className="font-bold text-rose-700">📲 Lipa Na M-Pesa Instructions:</p>
-                <ol className="list-decimal list-inside text-slate-600 space-y-1">
-                  <li>Go to M-Pesa Menu $\rightarrow$ Lipa na M-Pesa</li>
-                  <li>Select <span className="font-bold">Buy Goods and Services</span></li>
-                  <li>Enter Till Number: <span className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border">{MY_PENDOMATCH_TILL}</span></li>
-                  <li>Enter Amount: <span className="font-bold text-slate-900">{selectedTier.price}</span></li>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button onClick={triggerPremiumAction} className="py-2.5 bg-slate-950 border border-slate-800 hover:bg-slate-900 rounded-xl text-xs font-bold transition text-slate-300">
+                  View Private Photos
+                </button>
+                <button onClick={triggerPremiumAction} className="py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:opacity-95 rounded-xl text-xs font-black text-white transition shadow-md shadow-rose-950/40">
+                  Send Direct Message 💬
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Dynamic Soft Paywall Modal Overlay */}
+        {showPaywall && !selectedTier && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 max-w-sm w-full p-6 rounded-3xl shadow-2xl text-center space-y-6">
+              <div className="space-y-2">
+                <div className="text-3xl filter drop-shadow-[0_0_12px_rgba(244,63,94,0.4)]">🔒</div>
+                <h3 className="text-lg font-black text-white">Unlock Full Connection</h3>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  You discovered premium features! Upgrade your subscription tier to open messaging pipelines and access absolute visibility.
+                </p>
+              </div>
+
+              {/* Tiers list inside the paywall popup */}
+              <div className="space-y-3 text-left">
+                {tiers.map((t) => (
+                  <div key={t.id} className={`border p-4 rounded-2xl flex justify-between items-center ${t.color}`}>
+                    <div className="space-y-1">
+                      <p className="text-xs font-black tracking-wide">{t.name}</p>
+                      <p className="text-[10px] text-slate-400">{t.features[0]} • Instant Activation</p>
+                    </div>
+                    <button onClick={() => setSelectedTier(t)} className="px-3 py-1.5 bg-white text-slate-950 font-black text-[11px] rounded-lg shadow uppercase hover:opacity-90 transition">
+                      {t.price}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={() => setShowPaywall(false)} className="text-xs font-bold text-slate-500 hover:text-slate-400 transition pt-2">
+                Continue Browsing Freely
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Checkout Modal Overlay Panel */}
+        {selectedTier && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900 border border-slate-800 max-w-sm w-full p-6 rounded-3xl shadow-2xl space-y-5">
+              <h3 className="text-base font-black text-white">Confirm Tier Activation</h3>
+              
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs space-y-2 text-slate-300">
+                <p className="font-bold text-rose-400">📲 M-Pesa Instructions (Pochi La Biashara):</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-400">
+                  <li>Dial <span className="font-bold text-white">*334#</span></li>
+                  <li>Select Pochi La Biashara</li>
+                  <li>Send Payment to: <span className="font-bold text-white bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">{MY_PENDOMATCH_POCHI}</span></li>
+                  <li>Amount: <span className="font-bold text-white">{selectedTier.price}</span></li>
                 </ol>
               </div>
 
               <form onSubmit={handleManualPaymentSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                     Paste M-Pesa Transaction Code
                   </label>
                   <input
@@ -150,53 +217,19 @@ export default function DashboardPage() {
                     placeholder="e.g. QE76XYZ890"
                     value={transactionCode}
                     onChange={(e) => setTransactionCode(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl uppercase font-bold tracking-widest text-center text-sm outline-none focus:ring-2 focus:ring-rose-500"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl uppercase font-bold tracking-widest text-center text-sm text-white outline-none focus:border-rose-500 transition"
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setSelectedTier(null)} className="w-1/2 py-2 text-xs font-bold text-slate-400 bg-slate-50 rounded-xl">Cancel</button>
-                  <button type="submit" disabled={isSubmittingCode} className="w-1/2 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl disabled:bg-rose-300">
-                    {isSubmittingCode ? "Submitting..." : "VERIFY PAYMENT 💌"}
+                  <button type="button" onClick={() => setSelectedTier(null)} className="w-1/2 py-2 text-xs font-bold text-slate-500 bg-slate-950 border border-slate-800 rounded-xl">Back</button>
+                  <button type="submit" disabled={isSubmittingCode} className="w-1/2 py-2 text-xs font-black text-white bg-rose-500 rounded-xl transition disabled:opacity-50">
+                    {isSubmittingCode ? "Verifying..." : "SUBMIT CODE"}
                   </button>
                 </div>
               </form>
             </div>
           </div>
         )}
-
-        <section className="bg-white border border-rose-100 p-6 md:p-8 rounded-3xl shadow-sm">
-          <h2 className="text-2xl font-black text-slate-900">Welcome to PendoMatch, {profile?.displayName || "Member"}! 💞</h2>
-          <p className="text-slate-500 text-sm mt-1 max-w-xl">
-            Your workspace is active. Choose an upgraded account tier below to begin expanding your profile views and connecting with matches instantly.
-          </p>
-        </section>
-
-        {/* Pricing Layout Cards System GRID */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {tiers.map((t) => {
-            const isCurrent = (profile?.tier || "free") === t.id;
-            return (
-              <div key={t.id} className={`border p-6 rounded-3xl shadow-sm flex flex-col justify-between ${t.color}`}>
-                <div>
-                  <h4 className="text-sm font-black text-slate-900">{t.name}</h4>
-                  <p className="text-2xl font-black text-slate-900 my-2">{t.price}</p>
-                  <ul className="space-y-2 border-t border-slate-100 pt-4 mb-6">
-                    {t.features.map((feat, i) => <li key={i} className="text-xs text-slate-600">✔ {feat}</li>)}
-                  </ul>
-                </div>
-                {isCurrent ? (
-                  <div className="text-center py-2 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold">ACTIVE PLAN</div>
-                ) : t.id === "free" ? (
-                  <div className="text-center py-2 text-slate-300 text-xs">Standard Default</div>
-                ) : (
-                  <button onClick={() => setSelectedTier(t)} className="w-full py-2 bg-gradient-to-r from-rose-500 to-pink-600 text-white font-black rounded-xl text-xs uppercase tracking-wider">
-                    Select {t.id}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </section>
       </main>
     </div>
   );
