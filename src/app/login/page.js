@@ -1,13 +1,20 @@
 "use client";
 import { useState } from "react";
 import { auth } from "../firebase";
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { 
+  signInWithEmailAndPassword, 
+  sendPasswordResetEmail, 
+  setPersistence, 
+  browserLocalPersistence, 
+  browserSessionPersistence 
+} from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true); // Defaults to checked for smooth mobile entry
   const [message, setMessage] = useState({ text: "", type: "" });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -18,9 +25,15 @@ export default function LoginPage() {
     setMessage({ text: "", type: "" });
 
     try {
+      // Configure Firebase session retention type based on user checkbox choice
+      const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistenceType);
+      
+      // Complete secure sign-in process
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
     } catch (err) {
+      console.error("Authentication check block break:", err);
       setMessage({ 
         text: "We couldn't find a match for that email or password. Please verify your details.", 
         type: "error" 
@@ -127,10 +140,26 @@ export default function LoginPage() {
             />
           </div>
 
+          {/* Premium Branded Remember Me Toggle Link System */}
+          <div className="flex items-center justify-between pt-1 select-none">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                disabled={isLoading}
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-rose-500 focus:ring-0 focus:ring-offset-0 outline-none accent-rose-500 cursor-pointer"
+              />
+              <span className="text-xs font-medium text-slate-400 group-hover:text-slate-300 transition">
+                Keep me logged in
+              </span>
+            </label>
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-gradient-to-r from-rose-500 to-pink-600 hover:opacity-95 text-white font-black py-3.5 px-4 rounded-xl shadow-lg transition text-sm tracking-wide transform active:scale-[0.99]"
+            className="w-full bg-gradient-to-r from-rose-500 to-pink-600 hover:opacity-95 text-white font-black py-3.5 px-4 rounded-xl shadow-lg transition text-sm tracking-wide transform active:scale-[0.99] mt-2"
           >
             {isLoading ? "Verifying..." : "ENTER PENDOMATCH 💖"}
           </button>
