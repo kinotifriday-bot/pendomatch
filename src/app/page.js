@@ -12,7 +12,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
- const handleSignup = async (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
