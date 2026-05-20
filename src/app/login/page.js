@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { auth } from "../firebase"; // Reaches out to src/app/firebase.js
+import { auth } from "../firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -19,108 +19,97 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Once logged in, smoothly transition them into the workspace dashboard
       router.push("/dashboard");
     } catch (err) {
-      // Humanizing raw Firebase Auth system errors
-      switch (err.code) {
-        case "auth/invalid-credential":
-        case "auth/user-not-found":
-        case "auth/wrong-password":
-          setError("Invalid email or password combination.");
-          break;
-        case "auth/too-many-requests":
-          setError("This account has been temporarily locked due to too many failed attempts. Try again later.");
-          break;
-        default:
-          setError("Failed to sign in. Please verify your details and try again.");
-      }
+      setError("Credentials don't match our database records.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-tr from-purple-700 via-pink-600 to-rose-500 px-4 relative overflow-hidden">
+      <div className="absolute w-96 h-96 bg-rose-400 rounded-full blur-3xl opacity-20 -top-20 -right-20" />
+      
+      <div className="w-full max-w-md space-y-6 bg-white/95 backdrop-blur-lg p-8 rounded-3xl shadow-2xl border border-white/20 relative z-10">
         
-        {/* Branding/Header */}
-        <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Sign in to Mingle</h2>
-          <p className="mt-2 text-sm text-slate-500">Welcome back! Please enter your credentials.</p>
+        <div className="flex flex-col items-center justify-center text-center">
+          {/* Linked 3D Logo Layout */}
+          <div className="w-20 h-20 filter drop-shadow-[0_8px_10px_rgba(219,39,119,0.4)]">
+            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <defs>
+                <radialGradient id="loginHeart" cx="40%" cy="30%" r="70%">
+                  <stop offset="0%" stopColor="#f472b6" />
+                  <stop offset="100%" stopColor="#be185d" />
+                </radialGradient>
+                <linearGradient id="flame" x1="0%" y1="50%" x2="100%" y2="50%">
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0" />
+                  <stop offset="100%" stopColor="#d946ef" />
+                </linearGradient>
+              </defs>
+              <path d="M 10,130 C 40,115 70,110 95,105" stroke="url(#flame)" strokeWidth="12" strokeLinecap="round" />
+              <path d="M 100,60 C 80,20 20,25 20,75 C 20,120 75,155 100,175 C 125,155 180,120 180,75 C 180,25 120,20 100,60 Z" fill="url(#loginHeart)" />
+              <path d="M 90,105 L 175,70" stroke="#ffffff" strokeWidth="8" strokeLinecap="round" />
+              <path d="M 170,65 L 185,65 L 180,80 Z" fill="#fbbf24" />
+            </svg>
+          </div>
+          
+          <h2 className="text-2xl font-black text-slate-900 mt-2">Welcome Back</h2>
+          <p className="text-xs font-semibold text-pink-600 tracking-wider uppercase">PendoMatch.com</p>
         </div>
 
-        {/* Error Alert Box */}
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md text-sm text-red-700 animate-fade-in">
-            <p className="font-medium">Authentication Error</p>
+          <div className="bg-rose-50 border-l-4 border-rose-500 p-3 rounded-r-xl text-xs text-rose-700">
             <p>{error}</p>
           </div>
         )}
 
-        {/* Login Form */}
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                disabled={isLoading}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-slate-50 disabled:text-slate-400"
-                placeholder="name@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                disabled={isLoading}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-slate-50 disabled:text-slate-400"
-                placeholder="••••••••"
-              />
-            </div>
+        <form className="space-y-4" onSubmit={handleLogin}>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              required
+              disabled={isLoading}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition"
+              placeholder="you@lovemail.com"
+            />
           </div>
 
-          {/* Action Trigger Button */}
           <div>
-            <button
-              type="submit"
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              required
               disabled={isLoading}
-              className="group relative flex w-full justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition disabled:bg-blue-400 disabled:cursor-not-allowed items-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Authenticating...
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </button>
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition"
+              placeholder="••••••••"
+            />
           </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-95 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg transition text-sm"
+          >
+            {isLoading ? "Signing in..." : "ENTER PENDOMATCH 💖"}
+          </button>
         </form>
 
-        {/* Footer Navigation Switch */}
-        <p className="text-center text-sm text-slate-600">
-          Don't have an account yet?{" "}
-          <Link href="/" className="font-semibold text-blue-600 hover:text-blue-500 transition">
-            Register here
+        <p className="text-center text-xs text-slate-500">
+          New here?{" "}
+          <Link href="/" className="font-bold text-pink-500 hover:text-purple-600 transition">
+            Create an Account
           </Link>
         </p>
-
       </div>
     </div>
   );
