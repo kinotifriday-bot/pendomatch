@@ -19,26 +19,7 @@ export default function RegisterPage() {
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      // Sweeps them directly into the profile customization screen
       router.push("/onboarding");
-    } catch (err) {
-      switch (err.code) {
-        case "auth/email-already-in-use":
-          setError("This email is already on our love radar! Try logging in.");
-          break;
-        case "auth/weak-password":
-          setError("Make your password a bit stronger (at least 6 characters).");
-          break;
-        default:
-          setError("The sparks missed this time. Please check your inputs and try again.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
     } catch (err) {
       switch (err.code) {
         case "auth/email-already-in-use":
