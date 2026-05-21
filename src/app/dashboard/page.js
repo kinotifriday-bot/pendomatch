@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("Home");
@@ -14,9 +14,27 @@ export default function Dashboard() {
       if (!auth.currentUser) return;
       
       try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
-        if (userDoc.exists()) setUser(userDoc.data());
+        const userRef = doc(db, "users", auth.currentUser.uid);
+        const userDoc = await getDoc(userRef);
+        
+        if (userDoc.exists()) {
+          setUser(userDoc.data());
+        } else {
+          // SAFEGUARD FOR NEW REGISTRATIONS:
+          // If the registration flow forgot to create the Firestore document, create it here on the fly!
+          const newUserData = {
+            uid: auth.currentUser.uid,
+            displayName: auth.currentUser.displayName || "New User",
+            email: auth.currentUser.email,
+            tier: "free", // Default them to free safely
+            country: "Not set",
+            bio: "No bio yet."
+          };
+          await setDoc(userRef, newUserData);
+          setUser(newUserData);
+        }
 
+        // Fetch other users for browsing pipeline
         const querySnapshot = await getDocs(collection(db, "users"));
         const usersList = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
@@ -26,13 +44,12 @@ export default function Dashboard() {
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
-        loading(false);
+        setLoading(false);
       }
     };
     fetchData();
   }, []);
 
-  // Securely triggers payment api endpoint without exposing credentials
   const handleUpgrade = async (selectedTier) => {
     try {
       const response = await fetch('/api/payment', {
@@ -69,7 +86,7 @@ export default function Dashboard() {
               <div key={u.id} className="bg-slate-900 p-5 rounded-2xl mb-4 border border-slate-800">
                 <h3 className="font-bold text-lg">{u.displayName || "Anonymous"}</h3>
                 <p className="text-sm text-slate-400 mt-1">{u.bio || "No bio yet."}</p>
-                <p className="text-[10px] uppercase font-bold text-rose-500 mt-2">{u.country}</p>
+                <p className="text-[10px] uppercase font-bold text-rose-500 mt-2">{u.country || "Not specified"}</p>
               </div>
             ))}
           </div>
@@ -94,8 +111,9 @@ export default function Dashboard() {
 }
 
 function MessagesView({ user, onUpgrade }) {
-  // Paywall Logic: Only premium users can chat
-  const isPremium = user?.tier === "premium";
+  // Use a fallback to string parsing to prevent undefined errors
+  const userTier = user?.tier?.toLowerCase() || "free";
+  const isPremium = userTier === "premium" || userTier === "plus" || userTier === "basic";
 
   if (!isPremium) {
     return (
