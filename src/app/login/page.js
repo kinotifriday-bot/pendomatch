@@ -18,12 +18,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const [loginMethod, setLoginMethod] = useState("email"); // Options: "email" or "phone"
+  const [loginMethod, setLoginMethod] = useState("email"); // "email" or "phone"
+  const [isNewUser, setIsNewUser] = useState(false); // Separator flag to fix the email-in-use bug
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   
   // Phone Authentication States
-  const [countryCode, setCountryCode] = useState("+254"); // Default to Kenya
+  const [countryCode, setCountryCode] = useState("+254"); 
   const [phoneNumber, setPhoneNumber] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [confirmationResult, setConfirmationResult] = useState(null);
@@ -33,7 +34,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // Initialize invisible reCAPTCHA for phone safety safeguards
   useEffect(() => {
     if (typeof window !== "undefined" && !window.recaptchaVerifier) {
       try {
@@ -47,7 +47,6 @@ export default function LoginPage() {
     }
   }, []);
 
-  // Helper logic: Configures Firebase to create a new profile document securely on registration 
   const provisionUserInFirestore = async (user) => {
     const userRef = doc(db, "users", user.uid);
     const userDoc = await getDoc(userRef);
@@ -72,33 +71,35 @@ export default function LoginPage() {
       const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
       await setPersistence(auth, persistenceType);
       
-      // Try signing in; if user doesn't exist, register them cleanly to prevent auth/missing-email errors
-      try {
+      if (isNewUser) {
+        // User explicitly wants to create an account
+        const newCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await provisionUserInFirestore(newCredential.user);
+        router.push("/dashboard");
+      } else {
+        // User is logging into an existing account
         const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
         await provisionUserInFirestore(userCredential.user);
-      } catch (signInError) {
-        if (signInError.code === "auth/user-not-found" || signInError.code === "auth/invalid-credential") {
-          // Attempt immediate seamless runtime registration
-          const newCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-          await provisionUserInFirestore(newCredential.user);
-        } else {
-          throw signInError;
-        }
+        router.push("/dashboard");
       }
-
-      router.push("/dashboard");
     } catch (err) {
       console.error(err);
-      setMessage({ 
-        text: "Authentication verify failed. Please check your login credentials and try again.", 
-        type: "error" 
-      });
+      let errorText = "Authentication failed. Please check your details.";
+      
+      if (err.code === "auth/email-already-in-use") {
+        errorText = "This email is already registered! Please switch to 'Sign In' below to access your account.";
+      } else if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
+        errorText = "We couldn't find a match for that email or password. Please verify your details.";
+      } else if (err.code === "auth/weak-password") {
+        errorText = "Password should be at least 6 characters long.";
+      }
+      
+      setMessage({ text: errorText, type: "error" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Google Login Channel Handler
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setMessage({ text: "", type: "" });
@@ -119,7 +120,6 @@ export default function LoginPage() {
     }
   };
 
-  // Dispatch OTP sms pin
   const handleSendOtp = async (e) => {
     e.preventDefault();
     if (!phoneNumber) return;
@@ -132,16 +132,15 @@ export default function LoginPage() {
       const appVerifier = window.recaptchaVerifier;
       const confirmation = await signInWithPhoneNumber(auth, fullNumber, appVerifier);
       setConfirmationResult(confirmation);
-      setMessage({ text: "📲 Verification code SMS text sent! Check your inbox.", type: "success" });
+      setMessage({ text: "📲 Verification code SMS sent! Check your phone.", type: "success" });
     } catch (err) {
       console.error(err);
-      setMessage({ text: "Failed to dispatch SMS text pin. Verify your number layout format.", type: "error" });
+      setMessage({ text: "Failed to send SMS pin. Verify your number layout format.", type: "error" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Process OTP completion pipeline
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (!verificationCode || !confirmationResult) return;
@@ -154,7 +153,7 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err) {
       console.error(err);
-      setMessage({ text: "Incorrect or expired SMS entry token matching confirmation code.", type: "error" });
+      setMessage({ text: "Incorrect or expired SMS verification code.", type: "error" });
     } finally {
       setIsLoading(false);
     }
@@ -168,7 +167,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await sendPasswordResetEmail(auth, email.trim());
-      setMessage({ text: "💌 Reset link dispatched! Check your inbox to update your password.", type: "success" });
+      setMessage({ text: "💌 Reset link dispatched! Check your inbox.", type: "success" });
     } catch (err) {
       setMessage({ text: "Failed to send password reset link. Please try again.", type: "error" });
     } finally {
@@ -194,11 +193,13 @@ export default function LoginPage() {
               <path d="M 100,60 C 80,20 20,25 20,75 C 20,120 75,155 100,175 C 125,155 180,120 180,75 C 180,25 120,20 100,60 Z" fill="url(#loginHeart)" />
             </svg>
           </div>
-          <h2 className="text-xl font-black text-white mt-2 tracking-tight">Welcome Back</h2>
+          <h2 className="text-xl font-black text-white mt-2 tracking-tight">
+            {isNewUser ? "Create Account" : "Welcome Back"}
+          </h2>
           <p className="text-[10px] font-bold text-rose-500 tracking-widest uppercase mt-0.5">PendoMatch.com</p>
         </div>
 
-        {/* Dynamic Seamless Tab Switch Button Triggers */}
+        {/* Tab switch between email and phone */}
         <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-xl border border-slate-800/60">
           <button 
             type="button"
@@ -224,7 +225,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Email Login Module UI block Layout */}
+        {/* Email Login/Register Module */}
         {loginMethod === "email" && (
           <form className="space-y-4" onSubmit={handleLogin}>
             <div>
@@ -239,7 +240,9 @@ export default function LoginPage() {
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Password</label>
-                <button type="button" onClick={handleForgotPassword} disabled={isLoading} className="text-[10px] font-bold text-rose-400 outline-none">Forgot Password?</button>
+                {!isNewUser && (
+                  <button type="button" onClick={handleForgotPassword} disabled={isLoading} className="text-[10px] font-bold text-rose-400 outline-none">Forgot Password?</button>
+                )}
               </div>
               <input
                 type="password" required disabled={isLoading} value={password} onChange={(e) => setPassword(e.target.value)}
@@ -249,12 +252,24 @@ export default function LoginPage() {
             </div>
 
             <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-black py-3 px-4 rounded-xl text-sm tracking-wide transform active:scale-[0.99] mt-2">
-              {isLoading ? "Verifying Access..." : "ENTER PENDOMATCH 💖"}
+              {isLoading ? "Processing..." : isNewUser ? "CREATE ACCOUNT 💖" : "ENTER PENDOMATCH 💖"}
             </button>
+
+            {/* Dynamic context link to switch modes */}
+            <p className="text-center text-xs text-slate-400 pt-1">
+              {isNewUser ? "Already have an account?" : "New to PendoMatch?"}{" "}
+              <button 
+                type="button" 
+                onClick={() => { setIsNewUser(!isNewUser); setMessage({text:"", type:""}); }}
+                className="font-bold text-rose-400 hover:text-rose-300 transition underline bg-transparent border-none p-0 cursor-pointer"
+              >
+                {isNewUser ? "Sign In Instead" : "Register Here"}
+              </button>
+            </p>
           </form>
         )}
 
-        {/* Phone Login Module UI block Layout */}
+        {/* Phone Login Module */}
         {loginMethod === "phone" && (
           <div className="space-y-4">
             {!confirmationResult ? (
@@ -281,7 +296,7 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-black py-3 px-4 rounded-xl text-sm tracking-wide">
-                  {isLoading ? "Sending text SMS code..." : "DISPATCH ENTRY PIN 📲"}
+                  {isLoading ? "Sending text..." : "DISPATCH ENTRY PIN 📲"}
                 </button>
               </form>
             ) : (
@@ -295,7 +310,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-3 px-4 rounded-xl text-sm tracking-wide">
-                  {isLoading ? "Validating confirmation OTP code..." : "VERIFY CODE & OPEN PROFILE 🔓"}
+                  {isLoading ? "Validating..." : "VERIFY CODE & OPEN PROFILE 🔓"}
                 </button>
                 <button type="button" onClick={() => setConfirmationResult(null)} className="w-full text-center text-xs text-slate-500 font-bold hover:text-slate-400 transition">Change Phone Number</button>
               </form>
@@ -303,13 +318,12 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Social Authentication Matrix Separation Wrapper Layout */}
-        <div className="relative my-4 flex items-center justify-center">
+        <div className="relative my-3 flex items-center justify-center">
           <div className="absolute w-full h-[1px] bg-slate-800" />
-          <span className="relative px-3 bg-slate-900 text-[10px] font-black text-slate-500 uppercase tracking-widest z-10">or continue entry via</span>
+          <span className="relative px-3 bg-slate-900 text-[10px] font-black text-slate-500 uppercase tracking-widest z-10">or</span>
         </div>
 
-        {/* Integrated Social Channels */}
+        {/* Google Authentication */}
         <button
           type="button"
           onClick={handleGoogleLogin}
@@ -322,7 +336,7 @@ export default function LoginPage() {
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
           </svg>
-          Google Cloud Identity Provider
+          Continue with Google
         </button>
 
         <div className="flex items-center justify-between pt-1 select-none">
@@ -335,10 +349,6 @@ export default function LoginPage() {
           </label>
         </div>
 
-        <p className="text-center text-xs text-slate-400">
-          New here?{" "}
-          <Link href="/" className="font-bold text-rose-400 hover:text-rose-300 transition">Create an Account</Link>
-        </p>
       </div>
     </div>
   );
