@@ -8,7 +8,7 @@ import Link from "next/link";
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
-    email: "", password: "", location: "", gender: "", dob: ""
+    fullName: "", email: "", password: "", location: "", gender: "", dob: ""
   });
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState({ text: "", type: "" });
@@ -19,9 +19,25 @@ export default function RegisterPage() {
     setIsLoading(false);
     setStatusMessage({ text: "", type: "" });
 
-    // 1. STABILIZE EMAIL STRINGS (Trims mobile keyboard trailing spaces to fix the tester's crash)
     const cleanEmail = formData.email.trim();
+    const cleanName = formData.fullName.trim();
     
+    // 1. STRICT REAL NAME VALIDATION
+    if (!cleanName || cleanName.split(" ").length < 2) {
+      setStatusMessage({ 
+        text: "🙋‍♂️ Please enter your real full name (First and Last name) so matches know who you are.", 
+        type: "error" 
+      });
+      return;
+    }
+
+    // Block obvious spam or placeholder names
+    const lowerName = cleanName.toLowerCase();
+    if (lowerName.includes("anonymous") || lowerName.includes("new matcher") || lowerName.includes("test user") || lowerName.includes("admin")) {
+      setStatusMessage({ text: "❌ Please use your real official name. Fake aliases are not permitted.", type: "error" });
+      return;
+    }
+
     if (!cleanEmail || !formData.password) {
       setStatusMessage({ text: "❌ Please fill out your email and password completely.", type: "error" });
       return;
@@ -34,13 +50,12 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      // 2. RUN ACCOUNTS ENGINE
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, formData.password);
       
-      // 3. SECURE PROVISIONING (Guarantees no "Anonymous" user placeholders show up on dashboard)
+      // 2. SAVING THEIR REAL NAME DIRECTLY
       await setDoc(doc(db, "users", userCredential.user.uid), {
         uid: userCredential.user.uid,
-        displayName: "New Matcher", 
+        displayName: cleanName, // Saved cleanly right out of the gate!
         email: cleanEmail,
         location: formData.location,
         gender: formData.gender,
@@ -48,25 +63,18 @@ export default function RegisterPage() {
         bio: "No bio yet.",
         country: formData.location || "Not specified",
         tier: "free",
-        profileComplete: false,
+        profileComplete: true,
         createdAt: new Date()
       });
       
-      // 4. ROUTE CASE RECTIFICATION (Routes directly to capitalized folder /Onboarding to bypass 404)
       router.push("/Onboarding");
     } catch (err) { 
       console.error("Auth Engine Crash Trace: ", err.code, err.message);
-      
-      // 5. THE POLITE ALERT INSTANCE
       if (err.code === "auth/email-already-in-use") {
         setStatusMessage({ 
           text: "💌 It looks like you already have an account with us! Click 'Sign In' at the bottom to access your profile instantly.", 
           type: "error" 
         });
-      } else if (err.code === "auth/weak-password") {
-        setStatusMessage({ text: "❌ Security Notice: Password should be at least 6 characters.", type: "error" });
-      } else if (err.code === "auth/invalid-email") {
-        setStatusMessage({ text: "❌ The email address layout is malformed. Please verify.", type: "error" });
       } else {
         setStatusMessage({ text: `❌ Setup error: ${err.message}`, type: "error" });
       }
@@ -84,21 +92,26 @@ export default function RegisterPage() {
         <p className="text-center text-[10px] font-bold text-rose-500 tracking-widest uppercase mb-6">PendoMatch.com</p>
         
         {statusMessage.text && (
-          <div className={`p-4 rounded-xl text-xs font-semibold mb-4 border-l-4 ${
-            statusMessage.type === "success" ? "bg-emerald-950/40 border-emerald-500 text-emerald-400" : "bg-rose-950/40 border-rose-500 text-rose-400"
-          }`}>
+          <div className={`p-4 rounded-xl text-xs font-semibold mb-4 border-l-4 bg-rose-950/40 border-rose-500 text-rose-400`}>
             {statusMessage.text}
           </div>
         )}
 
         <form onSubmit={handleSignup} className="space-y-4">
+          {/* NEW FIELD: Full Name Collection */}
+          <input 
+            type="text" required placeholder="Full Name (e.g., John Doe)" 
+            onChange={(e) => setFormData({...formData, fullName: e.target.value})} 
+            className="w-full px-4 py-3 bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl text-white outline-none transition text-sm" 
+          />
+
           <input 
             type="email" required placeholder="Email Address" 
             onChange={(e) => setFormData({...formData, email: e.target.value})} 
             className="w-full px-4 py-3 bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl text-white outline-none transition text-sm" 
           />
           <input 
-            type="password" required placeholder="Password" 
+            type="password" required placeholder="Password (Min 6 Characters)" 
             onChange={(e) => setFormData({...formData, password: e.target.value})} 
             className="w-full px-4 py-3 bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl text-white outline-none transition text-sm" 
           />
@@ -140,11 +153,10 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Mandatory Legal Checkbox */}
           <label className="flex items-start gap-3 mt-4 text-[10px] text-slate-500 cursor-pointer select-none">
             <input type="checkbox" required className="mt-0.5 accent-rose-500 w-3.5 h-3.5 rounded" />
             <span className="leading-relaxed">
-              I agree to the <Link href="/terms" target="_blank" className="text-rose-500 underline font-semibold">Terms and Conditions</Link> and consent to the sharing of my data with third-party partners.
+              I agree to the <Link href="/terms" target="_blank" className="text-rose-500 underline font-semibold">Terms and Conditions</Link> and consent to data verification.
             </span>
           </label>
 
@@ -152,7 +164,7 @@ export default function RegisterPage() {
             type="submit" disabled={isLoading} 
             className="w-full bg-gradient-to-r from-rose-500 to-pink-600 py-3.5 rounded-xl font-black text-white text-xs tracking-wider uppercase mt-4 transition transform active:scale-[0.99] disabled:opacity-50"
           >
-            {isLoading ? "CREATING PROFILE..." : "START MATCHING 💖"}
+            {isLoading ? "PROVISIONING..." : "START MATCHING 💖"}
           </button>
         </form>
         
