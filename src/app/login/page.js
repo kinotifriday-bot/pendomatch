@@ -19,7 +19,7 @@ import Link from "next/link";
 
 export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState("email"); // "email" or "phone"
-  const [isNewUser, setIsNewUser] = useState(false); // Separator flag to fix the email-in-use bug
+  const [isNewUser, setIsNewUser] = useState(false); // Controls the mode toggle
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   
@@ -67,31 +67,54 @@ export default function LoginPage() {
     setIsLoading(true);
     setMessage({ text: "", type: "" });
 
+    // 1. HARD SAFEGUARD: Prevent auth/missing-email and invalid-email crashes before calling Firebase
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
+      setMessage({ text: "❌ Please fill in both email and password fields.", type: "error" });
+      setIsLoading(false);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setMessage({ text: "❌ Please enter a valid email address structure (e.g. name@example.com).", type: "error" });
+      setIsLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage({ text: "❌ Security requirement: Password must be at least 6 characters.", type: "error" });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
       await setPersistence(auth, persistenceType);
       
       if (isNewUser) {
-        // User explicitly wants to create an account
-        const newCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        // User explicitly wants to Register a new account
+        const newCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
         await provisionUserInFirestore(newCredential.user);
         router.push("/dashboard");
       } else {
         // User is logging into an existing account
-        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
         await provisionUserInFirestore(userCredential.user);
         router.push("/dashboard");
       }
     } catch (err) {
-      console.error(err);
+      console.error("Firebase Auth Error: ", err.code, err.message);
       let errorText = "Authentication failed. Please check your details.";
       
+      // 2. POLITE ALERTS FOR EXISTING USERS
       if (err.code === "auth/email-already-in-use") {
-        errorText = "This email is already registered! Please switch to 'Sign In' below to access your account.";
+        errorText = "💌 This email is already registered! We switched the form below to 'Sign In' so you can enter your password and log in immediately.";
+        setIsNewUser(false); // Instantly switches the UI form back to Sign-In mode for them!
       } else if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
-        errorText = "We couldn't find a match for that email or password. Please verify your details.";
-      } else if (err.code === "auth/weak-password") {
-        errorText = "Password should be at least 6 characters long.";
+        errorText = "❌ We couldn't find a match for that email or password. Please verify your details.";
+      } else if (err.code === "auth/invalid-email") {
+        errorText = "❌ The email format is invalid. Please double check.";
       }
       
       setMessage({ text: errorText, type: "error" });

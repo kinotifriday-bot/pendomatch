@@ -38,7 +38,16 @@ export default function Dashboard() {
         const querySnapshot = await getDocs(collection(db, "users"));
         const usersList = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(u => u.id !== auth.currentUser?.uid);
+          .filter(u => {
+            // 1. Filter out yourself from showing up in your own feed
+            const isNotMe = u.id !== auth.currentUser?.uid;
+            
+            // 2. Strict Filter: Wipe out raw anonymous/incomplete test profiles from the screen
+            const hasRealName = u.displayName && u.displayName !== "New User" && u.displayName !== "New Matcher" && u.displayName !== "Anonymous";
+            const hasRealBio = u.bio && u.bio !== "No bio yet.";
+            
+            return isNotMe && hasRealName && hasRealBio;
+          });
         
         setAllUsers(usersList);
       } catch (error) {
@@ -48,7 +57,7 @@ export default function Dashboard() {
       }
     };
     fetchData();
-  }, []);
+  }, [activeTab]); // Triggers refresh when switching screens to keep it clean
 
   const handleUpgrade = async (selectedTier) => {
     try {
@@ -82,13 +91,19 @@ export default function Dashboard() {
         {activeTab === "Home" && (
           <div>
             <h2 className="text-2xl font-black mb-6">Discover Everyone</h2>
-            {allUsers.map(u => (
-              <div key={u.id} className="bg-slate-900 p-5 rounded-2xl mb-4 border border-slate-800">
-                <h3 className="font-bold text-lg">{u.displayName || "Anonymous"}</h3>
-                <p className="text-sm text-slate-400 mt-1">{u.bio || "No bio yet."}</p>
-                <p className="text-[10px] uppercase font-bold text-rose-500 mt-2">{u.country || "Not specified"}</p>
+            {allUsers.length === 0 ? (
+              <div className="text-center mt-20 text-slate-500 text-sm">
+                Looking for new profiles... Active matches will reveal themselves shortly!
               </div>
-            ))}
+            ) : (
+              allUsers.map(u => (
+                <div key={u.id} className="bg-slate-900 p-5 rounded-2xl mb-4 border border-slate-800">
+                  <h3 className="font-bold text-lg">{u.displayName || "Anonymous"}</h3>
+                  <p className="text-sm text-slate-400 mt-1">{u.bio || "No bio yet."}</p>
+                  <p className="text-[10px] uppercase font-bold text-rose-500 mt-2">{u.country || "Not specified"}</p>
+                </div>
+              ))
+            )}
           </div>
         )}
         
@@ -111,7 +126,6 @@ export default function Dashboard() {
 }
 
 function MessagesView({ user, onUpgrade }) {
-  // Use a fallback to string parsing to prevent undefined errors
   const userTier = user?.tier?.toLowerCase() || "free";
   const isPremium = userTier === "premium" || userTier === "plus" || userTier === "basic";
 
@@ -173,7 +187,10 @@ function ProfileView({ userData, loading }) {
         <p><strong>Country:</strong> {userData?.country || "Not set"}</p>
         <p><strong>Bio:</strong> {userData?.bio || "No bio yet"}</p>
       </div>
-      <button onClick={() => window.location.href='/onboarding'} className="w-full py-3 bg-rose-600 rounded-xl font-bold">Edit Profile</button>
+      {/* CASE RECTIFICATION: Points explicitly to /Onboarding to prevent 404 router failure */}
+      <button onClick={() => window.location.href='/Onboarding'} className="w-full py-3 bg-rose-600 rounded-xl font-bold hover:bg-rose-700 transition">
+        Edit Profile
+      </button>
     </div>
   );
 }
