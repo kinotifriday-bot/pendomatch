@@ -39,8 +39,14 @@ export default function Onboarding() {
 
   const saveProfile = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, "users", auth.currentUser.uid), { ...data, profileComplete: true });
-    router.push("/dashboard");
+    try {
+      await updateDoc(doc(db, "users", auth.currentUser.uid), { ...data, profileComplete: true });
+      
+      // FIXED: Routed to capitalized /Dashboard folder to prevent the Vercel 404 crash
+      router.push("/Dashboard");
+    } catch (error) {
+      console.error("Error saving profile:", error);
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Loading...</div>;
@@ -56,9 +62,9 @@ export default function Onboarding() {
             <textarea 
               value={data.bio}
               onChange={(e) => setData({...data, bio: e.target.value})}
-              className="w-full h-32 p-4 bg-slate-950 rounded-xl border border-slate-700 outline-none focus:border-rose-500"
+              className="w-full h-32 p-4 bg-slate-950 rounded-xl border border-slate-700 outline-none focus:border-rose-500 text-white"
             />
-            <button onClick={() => setStep(2)} className="w-full py-3 bg-rose-600 rounded-xl font-black">Next</button>
+            <button onClick={() => setStep(2)} className="w-full py-3 bg-rose-600 rounded-xl font-black transition active:scale-[0.99]">Next</button>
           </div>
         )}
 
@@ -69,12 +75,12 @@ export default function Onboarding() {
             <div className="grid grid-cols-2 gap-2 h-64 overflow-y-auto pr-2">
               {interestsList.map(i => (
                 <button key={i} onClick={() => toggleInterest(i)} 
-                  className={`p-3 rounded-xl text-xs font-bold border ${data.interests.includes(i) ? 'bg-rose-600 border-rose-600' : 'bg-slate-800 border-slate-700'}`}>
+                  className={`p-3 rounded-xl text-xs font-bold border transition active:scale-[0.98] ${data.interests.includes(i) ? 'bg-rose-600 border-rose-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}>
                   {i}
                 </button>
               ))}
             </div>
-            <button onClick={() => setStep(3)} className="w-full py-3 bg-rose-600 rounded-xl font-black">Next</button>
+            <button onClick={() => setStep(3)} className="w-full py-3 bg-rose-600 rounded-xl font-black transition active:scale-[0.99]">Next</button>
           </div>
         )}
 
@@ -82,13 +88,15 @@ export default function Onboarding() {
         {step === 3 && (
           <div className="space-y-4">
             <h2 className="text-2xl font-black text-rose-500">Looking For?</h2>
-            {["Short-term Fun", "Long-term Relationship", "Just Friends", "Still figuring it out"].map(opt => (
-              <button key={opt} onClick={() => setData({...data, intent: opt})}
-                className={`w-full py-4 rounded-xl border font-bold text-sm ${data.intent === opt ? 'bg-rose-600 border-rose-600' : 'bg-slate-800 border-slate-700'}`}>
-                {opt}
-              </button>
-            ))}
-            <button onClick={saveProfile} className="w-full py-3 bg-white text-slate-900 rounded-xl font-black">Save Profile</button>
+            <div className="space-y-2">
+              {["Short-term Fun", "Long-term Relationship", "Just Friends", "Still figuring it out"].map(opt => (
+                <button key={opt} onClick={() => setData({...data, intent: opt})}
+                  className={`w-full py-4 rounded-xl border font-bold text-sm transition active:scale-[0.99] ${data.intent === opt ? 'bg-rose-600 border-rose-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+            <button onClick={saveProfile} className="w-full py-3 bg-white text-slate-900 rounded-xl font-black transition active:scale-[0.99] mt-4">Save Profile</button>
           </div>
         )}
       </div>
