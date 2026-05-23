@@ -1,12 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, arrayUnion } from "firebase/firestore";
+import { motion, useMotionValue, useTransform, useAnimation } from "framer-motion";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("Home");
   const [user, setUser] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0); // Tracks current profile card index
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,12 +18,13 @@ export default function Dashboard() {
       try {
         const userRef = doc(db, "users", auth.currentUser.uid);
         const userDoc = await getDoc(userRef);
+        let currentUserData = null;
         
         if (userDoc.exists()) {
-          setUser(userDoc.data());
+          currentUserData = userDoc.data();
+          setUser(currentUserData);
         } else {
-          // SAFEGUARD FOR NEW REGISTRATIONS
-          const newUserData = {
+          currentUserData = {
             uid: auth.currentUser.uid,
             displayName: auth.currentUser.displayName || "New Matcher",
             email: auth.currentUser.email,
@@ -29,27 +32,35 @@ export default function Dashboard() {
             country: "Kenya",
             bio: "No bio yet.",
             profilePic: "",
-            interests: []
+            interests: [],
+            likedUsers: [],
+            passedUsers: []
           };
-          await setDoc(userRef, newUserData);
-          setUser(newUserData);
+          await setDoc(userRef, currentUserData);
+          setUser(currentUserData);
         }
 
         // Fetch other users for browsing pipeline
         const querySnapshot = await getDocs(collection(db, "users"));
+        
+        // Track already swiped items to keep feed pristine
+        const swipedUserIds = [
+          ...(currentUserData.likedUsers || []),
+          ...(currentUserData.passedUsers || [])
+        ];
+
         const usersList = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
           .filter(u => {
-            // 1. Filter out yourself from showing up in your own feed
             const isNotMe = u.id !== auth.currentUser?.uid;
-            
-            // 2. Strict Filter: Wipe out raw anonymous/incomplete test profiles from the screen
             const hasRealName = u.displayName && u.displayName !== "New User" && u.displayName !== "New Matcher" && u.displayName !== "Anonymous";
+            const notSwipedYet = !swipedUserIds.includes(u.id);
             
-            return isNotMe && hasRealName;
+            return isNotMe && hasRealName && notSwipedYet;
           });
         
         setAllUsers(usersList);
+        setCurrentIndex(usersList.length - 1); // Point stack tracker index to top card
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
@@ -58,6 +69,35 @@ export default function Dashboard() {
     };
     fetchData();
   }, [activeTab]);
+
+  // Handle Swipe Engine Interactions 
+  const handleSwipeAction = async (targetUserId, actionType) => {
+    if (!auth.currentUser) return;
+    
+    const myUid = auth.currentUser.uid;
+    const userRef = doc(db, "users", myUid);
+
+    try {
+      if (actionType === "like") {
+        await updateDoc(userRef, { likedUsers: arrayUnion(targetUserId) });
+        console.log(`Liked profile: ${targetUserId}`);
+        
+        // Check for immediate mutual match condition
+        const targetUserDoc = await getDoc(doc(db, "users", targetUserId));
+        if (targetUserDoc.exists() && targetUserDoc.data().likedUsers?.includes(myUid)) {
+          alert(`🎉 Match Alert! You and ${targetUserDoc.data().displayName} matched!`);
+        }
+      } else {
+        await updateDoc(userRef, { passedUsers: arrayUnion(targetUserId) });
+        console.log(`Passed profile: ${targetUserId}`);
+      }
+    } catch (err) {
+      console.error("Error logging swipe action:", err);
+    }
+
+    // Decrement top stack index to transition to underlying card
+    setCurrentIndex((prevIndex) => prevIndex - 1);
+  };
 
   const handleUpgrade = async (selectedTier) => {
     try {
@@ -82,7 +122,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-24">
+    <div className="min-h-screen bg-slate-950 text-white pb-24 overflow-x-hidden">
       <header className="p-6 border-b border-slate-900 flex justify-between items-center bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
         <h1 className="text-xl font-black text-rose-500 tracking-wider">PendoMatch</h1>
         {user?.tier && (
@@ -94,54 +134,31 @@ export default function Dashboard() {
 
       <main className="p-6 max-w-md mx-auto">
         {activeTab === "Home" && (
-          <div className="space-y-6 text-center">
+          <div className="space-y-6">
             <h2 className="text-xl font-black tracking-tight text-left">Discover Everyone</h2>
-            {allUsers.length === 0 ? (
-              <div className="text-center mt-20 text-slate-500 text-sm animate-pulse">
-                Looking for new profiles... Active matches will reveal themselves shortly!
+            
+            {loading ? (
+              <div className="text-center mt-20 text-slate-500 text-sm animate-pulse">Loading feed...</div>
+            ) : currentIndex < 0 || allUsers.length === 0 ? (
+              <div className="text-center mt-20 text-slate-500 text-sm animate-pulse px-4">
+                👋 You've caught up with everyone around you! Check back later for new match recommendations.
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center gap-6">
-                {allUsers.map(u => (
-                  <div key={u.id} className="relative w-full h-[480px] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 transition transform hover:scale-[1.01]">
-                    
-                    {/* 1. Main Profile Photo Layout */}
-                    <img 
-                      src={u.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"} 
-                      alt={u.displayName}
-                      className="w-full h-full object-cover"
+              <div className="relative w-full h-[510px] flex items-center justify-center">
+                {allUsers.map((u, index) => {
+                  // Render only the top card and the underlying preview card for rendering efficiency
+                  if (index < currentIndex - 1 || index > currentIndex) return null;
+                  const isTopCard = index === currentIndex;
+
+                  return (
+                    <SwipeCard 
+                      key={u.id}
+                      userProfile={u}
+                      isTop={isTopCard}
+                      onSwipe={(direction) => handleSwipeAction(u.id, direction)}
                     />
-
-                    {/* 2. Sleek Deep Gradient Overlay for UI Text Readability */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
-
-                    {/* 3. Card Information Details Layout */}
-                    <div className="absolute bottom-0 left-0 right-0 p-6 text-left space-y-2">
-                      <div className="flex items-baseline gap-2">
-                        <h3 className="text-2xl font-black text-white tracking-tight">{u.displayName || "Anonymous"}</h3>
-                        {u.age && <span className="text-xl text-slate-300 font-medium">{u.age}</span>}
-                      </div>
-                      
-                      <p className="text-xs text-rose-400 font-bold tracking-wide">📍 {u.country || "Chuka"}</p>
-                      
-                      <p className="text-sm text-slate-200 font-normal line-clamp-3 leading-relaxed">
-                        {u.bio || "No bio added yet."}
-                      </p>
-                      
-                      {/* Interactive Selection Hobbies Tags */}
-                      {u.interests && u.interests.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-2">
-                          {u.interests.slice(0, 3).map((interest) => (
-                            <span key={interest} className="text-[10px] font-extrabold bg-white/10 backdrop-blur-md text-white px-2.5 py-1 rounded-full border border-white/10">
-                              {interest}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -169,6 +186,119 @@ export default function Dashboard() {
   );
 }
 
+// Dedicated Drag-and-Swipe Interactive Card Component
+function SwipeCard({ userProfile, isTop, onSwipe }) {
+  const controls = useAnimation();
+  const x = useMotionValue(0);
+  
+  // Maps horizontal displacement values into explicit angular tilt rotations
+  const rotate = useTransform(x, [-200, 200], [-12, 12]);
+  
+  // Creates matching dynamically changing text opacity flags for UI feedback labels
+  const opacityLike = useTransform(x, [0, 100], [0, 1]);
+  const opacityNope = useTransform(x, [-100, 0], [1, 0]);
+
+  const handleDragEnd = async (event, info) => {
+    const swipeThreshold = 140; // Pixels required to trigger swipe event
+    
+    if (info.offset.x > swipeThreshold) {
+      // Swipe Right Dynamic Flyaway Action
+      await controls.start({ x: 500, opacity: 0, transition: { duration: 0.2 } });
+      onSwipe("like");
+    } else if (info.offset.x < -swipeThreshold) {
+      // Swipe Left Dynamic Flyaway Action
+      await controls.start({ x: -500, opacity: 0, transition: { duration: 0.2 } });
+      onSwipe("nope");
+    } else {
+      // Snap card back to dead center if threshold wasn't cleared
+      controls.start({ x: 0, y: 0, transition: { type: "spring", stiffness: 300, damping: 20 } });
+    }
+  };
+
+  const forceButtonSwipe = async (direction) => {
+    if (!isTop) return;
+    if (direction === "right") {
+      await controls.start({ x: 500, opacity: 0, transition: { duration: 0.3 } });
+      onSwipe("like");
+    } else {
+      await controls.start({ x: -500, opacity: 0, transition: { duration: 0.3 } });
+      onSwipe("nope");
+    }
+  };
+
+  return (
+    <motion.div
+      className="absolute w-full h-full flex flex-col justify-between"
+      style={{ x, rotate, zIndex: isTop ? 10 : 1, pointerEvents: isTop ? "auto" : "none" }}
+      drag={isTop ? "x" : false}
+      dragConstraints={{ left: 0, right: 0 }}
+      onDragEnd={handleDragEnd}
+      animate={controls}
+    >
+      <div className="relative w-full h-[440px] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 select-none">
+        {/* Dynamic UI Overlay Status Badges */}
+        {isTop && (
+          <>
+            <motion.div style={{ opacity: opacityLike }} className="absolute top-8 left-8 border-4 border-emerald-500 text-emerald-500 font-black text-2xl uppercase tracking-widest px-4 py-1.5 rounded-xl z-20 transform -rotate-12">
+              LIKE
+            </motion.div>
+            <motion.div style={{ opacity: opacityNope }} className="absolute top-8 right-8 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-4 py-1.5 rounded-xl z-20 transform rotate-12">
+              NOPE
+            </motion.div>
+          </>
+        )}
+
+        <img 
+          src={userProfile.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"} 
+          alt={userProfile.displayName}
+          className="w-full h-full object-cover pointer-events-none"
+        />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent pointer-events-none"></div>
+
+        <div className="absolute bottom-0 left-0 right-0 p-6 text-left space-y-2 pointer-events-none">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-black text-white tracking-tight">{userProfile.displayName || "Anonymous"}</h3>
+            {userProfile.age && <span className="text-xl text-slate-300 font-medium">{userProfile.age}</span>}
+          </div>
+          <p className="text-xs text-rose-400 font-bold tracking-wide">📍 {userProfile.country || "Kenya"}</p>
+          <p className="text-sm text-slate-200 font-normal line-clamp-2 leading-relaxed">{userProfile.bio || "No bio added yet."}</p>
+          
+          {userProfile.interests && userProfile.interests.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {userProfile.interests.slice(0, 3).map((interest) => (
+                <span key={interest} className="text-[10px] font-extrabold bg-white/10 backdrop-blur-md text-white px-2.5 py-1 rounded-full border border-white/10">
+                  {interest}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Manual Hardware Click Action Utility Buttons */}
+      {isTop && (
+        <div className="flex items-center justify-center gap-6 pt-2 z-30">
+          <button 
+            type="button"
+            onClick={() => forceButtonSwipe("left")}
+            className="w-12 h-12 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center text-rose-500 text-lg shadow-xl hover:scale-105 active:scale-95 transition"
+          >
+            ✕
+          </button>
+          <button 
+            type="button"
+            onClick={() => forceButtonSwipe("right")}
+            className="w-12 h-12 bg-gradient-to-r from-rose-500 to-pink-600 rounded-full flex items-center justify-center text-white text-lg shadow-xl hover:scale-105 active:scale-95 transition"
+          >
+            ❤️
+          </button>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 function MessagesView({ user, onUpgrade }) {
   const userTier = user?.tier?.toLowerCase() || "free";
   const isPremium = userTier === "premium" || userTier === "plus" || userTier === "basic";
@@ -183,7 +313,6 @@ function MessagesView({ user, onUpgrade }) {
         </div>
         
         <div className="space-y-4">
-          {/* Tier 2: Basic */}
           <div className="border border-slate-800 bg-slate-900/40 p-5 rounded-2xl flex flex-col justify-between">
             <div>
               <h3 className="text-md font-black tracking-tight">Tier 2: Basic</h3>
@@ -193,7 +322,6 @@ function MessagesView({ user, onUpgrade }) {
             <button onClick={() => onUpgrade('basic')} className="mt-4 w-full py-2.5 bg-rose-600 rounded-xl font-black hover:bg-rose-700 transition active:scale-[0.99] text-xs tracking-wider uppercase">Upgrade Basic</button>
           </div>
 
-          {/* Tier 3: Plus */}
           <div className="border border-slate-800 bg-slate-900/40 p-5 rounded-2xl flex flex-col justify-between">
             <div>
               <h3 className="text-md font-black tracking-tight text-yellow-500">Tier 3: Plus</h3>
@@ -203,7 +331,6 @@ function MessagesView({ user, onUpgrade }) {
             <button onClick={() => onUpgrade('plus')} className="mt-4 w-full py-2.5 bg-yellow-600 text-slate-950 rounded-xl font-black hover:bg-yellow-500 transition active:scale-[0.99] text-xs tracking-wider uppercase">Upgrade Plus</button>
           </div>
 
-          {/* Tier 4: Premium */}
           <div className="border border-rose-500/40 p-5 rounded-2xl flex flex-col justify-between relative bg-gradient-to-b from-slate-900 to-rose-950/20 shadow-xl shadow-rose-950/10">
             <span className="absolute -top-2.5 right-4 bg-rose-500 text-white text-[9px] px-2 py-0.5 rounded-full uppercase font-black tracking-widest">Best Value</span>
             <div>
@@ -220,6 +347,7 @@ function MessagesView({ user, onUpgrade }) {
   return <div className="text-center mt-20 text-slate-500 text-sm">Your inbox is empty. No new threads found.</div>;
 }
 
+// Unified User Profile Setup Component
 function ProfileView({ userData, loading }) {
   if (loading) return <div className="text-center mt-10 text-slate-500 text-sm animate-pulse">Syncing user layout profile...</div>;
   
