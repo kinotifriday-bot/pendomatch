@@ -173,4 +173,78 @@ function MessagesView({ user, onUpgrade }) {
   const userTier = user?.tier?.toLowerCase() || "free";
   const isPremium = userTier === "premium" || userTier === "plus" || userTier === "basic";
 
-  if (!
+  if (!isPremium) {
+    return (
+      <div className="p-0 max-w-md mx-auto text-white rounded-2xl mt-2">
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-xl border border-rose-500/20">🔒</div>
+          <h2 className="text-2xl font-black text-white tracking-tight">Upgrade to Chat</h2>
+          <p className="text-slate-400 mt-1 text-xs leading-relaxed max-w-xs mx-auto">Match for free, but unlock a tier layout to start conversation threads.</p>
+        </div>
+        
+        <div className="space-y-4">
+          {/* Tier 2: Basic */}
+          <div className="border border-slate-800 bg-slate-900/40 p-5 rounded-2xl flex flex-col justify-between">
+            <div>
+              <h3 className="text-md font-black tracking-tight">Tier 2: Basic</h3>
+              <p className="text-lg font-black mt-0.5 text-rose-400">KES 299</p>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">Up to 4 Photos, Expanded Profile Views, More Messaging Actions.</p>
+            </div>
+            <button onClick={() => onUpgrade('basic')} className="mt-4 w-full py-2.5 bg-rose-600 rounded-xl font-black hover:bg-rose-700 transition active:scale-[0.99] text-xs tracking-wider uppercase">Upgrade Basic</button>
+          </div>
+
+          {/* Tier 3: Plus */}
+          <div className="border border-slate-800 bg-slate-900/40 p-5 rounded-2xl flex flex-col justify-between">
+            <div>
+              <h3 className="text-md font-black tracking-tight text-yellow-500">Tier 3: Plus</h3>
+              <p className="text-lg font-black mt-0.5 text-yellow-500">KES 499</p>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed">Up to 8 Photos, 100 Profile Views per day, 10 Active Chat Threads.</p>
+            </div>
+            <button onClick={() => onUpgrade('plus')} className="mt-4 w-full py-2.5 bg-yellow-600 text-slate-950 rounded-xl font-black hover:bg-yellow-500 transition active:scale-[0.99] text-xs tracking-wider uppercase">Upgrade Plus</button>
+          </div>
+
+          {/* Tier 4: Premium */}
+          <div className="border border-rose-500/40 p-5 rounded-2xl flex flex-col justify-between relative bg-gradient-to-b from-slate-900 to-rose-950/20 shadow-xl shadow-rose-950/10">
+            <span className="absolute -top-2.5 right-4 bg-rose-500 text-white text-[9px] px-2 py-0.5 rounded-full uppercase font-black tracking-widest">Best Value</span>
+            <div>
+              <h3 className="text-md font-black tracking-tight text-rose-400">Tier 4: Premium</h3>
+              <p className="text-lg font-black mt-0.5 text-rose-400">KES 799</p>
+              <p className="text-xs text-slate-200 mt-2 leading-relaxed">Unlimited HD Photos & Video, Unlimited Browsing + Rewinds, Priority Instant DM Delivery.</p>
+            </div>
+            <button onClick={() => onUpgrade('premium')} className="mt-4 w-full py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 rounded-xl font-black hover:opacity-90 transition active:scale-[0.99] text-xs tracking-wider uppercase shadow-lg shadow-rose-500/20">Upgrade Premium</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return <div className="text-center mt-20 text-slate-500 text-sm">Your inbox is empty. No new threads found.</div>;
+}
+
+function ProfileView({ userData, loading }) {
+  if (loading) return <div className="text-center mt-10 text-slate-500 text-sm animate-pulse">Syncing user layout profile...</div>;
+  
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-black tracking-tight">My Profile</h2>
+      <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4 text-sm">
+        <div className="flex justify-center mb-2">
+          <img 
+            src={userData?.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"} 
+            alt="My Avatar" 
+            className="w-24 h-24 rounded-full object-cover border-2 border-rose-500/20 p-1"
+          />
+        </div>
+        <p className="border-b border-slate-800 pb-2 text-slate-300"><strong className="text-white font-bold mr-1">Name:</strong> {userData?.displayName || "Not set"}</p>
+        <p className="border-b border-slate-800 pb-2 text-slate-300"><strong className="text-white font-bold mr-1">Location:</strong> {userData?.country || "Kenya"}</p>
+        <p className="text-slate-300 leading-relaxed"><strong className="text-white font-bold block mb-1">Bio:</strong> {userData?.bio || "No bio yet"}</p>
+      </div>
+      
+      <button 
+        onClick={() => window.location.href='/onboarding'} 
+        className="w-full py-3 bg-slate-900 border border-slate-800 text-white rounded-xl font-black hover:bg-slate-850 transition active:scale-[0.99] tracking-wide text-sm"
+      >
+        Edit Profile Setup
+      </button>
+    </div>
+  );
+}

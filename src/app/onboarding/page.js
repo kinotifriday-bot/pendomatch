@@ -206,4 +206,14 @@ export default function Onboarding() {
               <button 
                 disabled={uploadingImage || (!imageFile && !data.profilePic)} 
                 onClick={saveProfile} 
-                className="w-2/3 py-3 bg-gradient-to-r from-rose-500 to-pink-600 disabled:from
+                className="w-2/3 py-3 bg-gradient-to-r from-rose-500 to-pink-600 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 rounded-xl font-black transition active:scale-[0.99]"
+              >
+                {uploadingImage ? "Uploading..." : "Save Profile 💖"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
