@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { db, auth } from "../firebase"; 
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function Onboarding() {
@@ -26,12 +26,12 @@ export default function Onboarding() {
     "Reading", "Fashion", "Sports", "Volunteering"
   ];
 
-  // Load existing data if it exists (for Profile Editing)
+  // Load existing data safely and watch the auth state
   useEffect(() => {
-    const loadData = async () => {
-      if (auth.currentUser) {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
         try {
-          const docSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+          const docSnap = await getDoc(doc(db, "users", user.uid));
           if (docSnap.exists()) {
             const fetchedData = docSnap.data();
             setData({
@@ -51,8 +51,9 @@ export default function Onboarding() {
         }
       }
       setLoading(false);
-    };
-    loadData();
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const toggleInterest = (i) => {
@@ -133,12 +134,19 @@ export default function Onboarding() {
         }
       }
 
-      // Update user registration completely inside Firestore
-      await updateDoc(doc(db, "users", auth.currentUser.uid), { 
+      // Capture Google authentication details to prevent double inputs
+      const userEmail = auth.currentUser.email || "";
+      const userName = auth.currentUser.displayName || "Pendo User";
+
+      // setDoc with { merge: true } creates the record if missing, preventing 404 router loops entirely
+      await setDoc(doc(db, "users", auth.currentUser.uid), { 
+        uid: auth.currentUser.uid,
+        name: userName,
+        email: userEmail,
         ...data, 
         profilePic: finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60",
         profileComplete: true 
-      });
+      }, { merge: true });
       
       router.push("/dashboard");
     } catch (error) {
@@ -288,7 +296,7 @@ export default function Onboarding() {
                 accept="image/*" 
                 onChange={handleImageChange} 
                 className="hidden" 
-              />
+                />
             </label>
 
             <div className="flex gap-2 mt-6">
