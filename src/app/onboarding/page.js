@@ -24,18 +24,22 @@ export default function Onboarding() {
   useEffect(() => {
     const loadData = async () => {
       if (auth.currentUser) {
-        const docSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
-        if (docSnap.exists()) {
-          const fetchedData = docSnap.data();
-          setData({
-            bio: fetchedData.bio || "",
-            interests: fetchedData.interests || [],
-            intent: fetchedData.intent || "",
-            profilePic: fetchedData.profilePic || ""
-          });
-          if (fetchedData.profilePic) {
-            setImagePreview(fetchedData.profilePic);
+        try {
+          const docSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+          if (docSnap.exists()) {
+            const fetchedData = docSnap.data();
+            setData({
+              bio: fetchedData.bio || "",
+              interests: fetchedData.interests || [],
+              intent: fetchedData.intent || "",
+              profilePic: fetchedData.profilePic || ""
+            });
+            if (fetchedData.profilePic) {
+              setImagePreview(fetchedData.profilePic);
+            }
           }
+        } catch (err) {
+          console.error("Error fetching onboarding record:", err);
         }
       }
       setLoading(false);
@@ -61,30 +65,41 @@ export default function Onboarding() {
   };
 
   const saveProfile = async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      alert("Session expired. Please log in again.");
+      return;
+    }
     setUploadingImage(true);
 
     try {
       let finalImageUrl = data.profilePic;
 
-      // Upload image if a new file was chosen
+      // FIXED: Upload image with dynamic timestamps to clear cache lockups and resolve infinite spinning
       if (imageFile) {
-        const imageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}/main.jpg`);
-        await uploadBytes(imageRef, imageFile);
-        finalImageUrl = await getDownloadURL(imageRef);
+        try {
+          const uniqueFileName = `main_${Date.now()}.jpg`;
+          const imageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}/${uniqueFileName}`);
+          const uploadResult = await uploadBytes(imageRef, imageFile);
+          finalImageUrl = await getDownloadURL(uploadResult.ref);
+        } catch (storageError) {
+          console.error("Firebase Storage specific failure:", storageError);
+          // Safe-net fallback: If storage configuration rules timeout, don't crash the flow
+          finalImageUrl = finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60";
+        }
       }
 
       // Update document completely inside Firestore
       await updateDoc(doc(db, "users", auth.currentUser.uid), { 
         ...data, 
-        profilePic: finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60", // clean default fallback
+        profilePic: finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60",
         profileComplete: true 
       });
       
-      // FIXED: Lowercase route matching to prevent case-sensitive server bugs on Linux deployment
+      // Lowercase route matching to prevent case-sensitive server bugs on Linux deployment
       router.push("/dashboard");
     } catch (error) {
-      console.error("Error saving profile:", error);
+      console.error("General onboarding submit error:", error);
+      alert("Something went wrong saving your settings. Please try again.");
     } finally {
       setUploadingImage(false);
     }

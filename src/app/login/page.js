@@ -47,6 +47,18 @@ export default function LoginPage() {
     }
   }, []);
 
+  // Evaluates user state and routes them safely to prevent 404 loops
+  const handleUserRouting = async (user) => {
+    const userRef = doc(db, "users", user.uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists() && userDoc.data()?.profileComplete) {
+      router.push("/dashboard");
+    } else {
+      router.push("/onboarding");
+    }
+  };
+
   const provisionUserInFirestore = async (user) => {
     const userRef = doc(db, "users", user.uid);
     const userDoc = await getDoc(userRef);
@@ -57,7 +69,8 @@ export default function LoginPage() {
         email: user.email || `${user.phoneNumber}@pendomatch.com`,
         tier: "free",
         country: "Not set",
-        bio: "No bio yet."
+        bio: "No bio yet.",
+        profileComplete: false
       });
     }
   };
@@ -67,7 +80,6 @@ export default function LoginPage() {
     setIsLoading(true);
     setMessage({ text: "", type: "" });
 
-    // 1. HARD SAFEGUARD: Prevent auth/missing-email and invalid-email crashes before calling Firebase
     const cleanEmail = email.trim();
     if (!cleanEmail || !password) {
       setMessage({ text: "❌ Please fill in both email and password fields.", type: "error" });
@@ -93,25 +105,39 @@ export default function LoginPage() {
       await setPersistence(auth, persistenceType);
       
       if (isNewUser) {
-        // User explicitly wants to Register a new account
-        const newCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-        await provisionUserInFirestore(newCredential.user);
-        router.push("/dashboard");
+        try {
+          const newCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          await provisionUserInFirestore(newCredential.user);
+          await handleUserRouting(newCredential.user);
+        } catch (registerError) {
+          // INTERCEPT KNOWN USER REGISTRATION ATTEMPTS
+          if (registerError.code === "auth/email-already-in-use") {
+            console.log("Existing user tried to register. Redirecting to clean sign-in cascade...");
+            
+            // Log them in automatically with the password provided instead of blocking them!
+            const loginCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+            setMessage({ 
+              text: "💌 Welcome back! You already have an account setup with us. Signing you in smoothly...", 
+              type: "success" 
+            });
+            
+            setTimeout(async () => {
+              await handleUserRouting(loginCredential.user);
+            }, 1500);
+          } else {
+            throw registerError;
+          }
+        }
       } else {
-        // User is logging into an existing account
         const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
         await provisionUserInFirestore(userCredential.user);
-        router.push("/dashboard");
+        await handleUserRouting(userCredential.user);
       }
     } catch (err) {
       console.error("Firebase Auth Error: ", err.code, err.message);
       let errorText = "Authentication failed. Please check your details.";
       
-      // 2. POLITE ALERTS FOR EXISTING USERS
-      if (err.code === "auth/email-already-in-use") {
-        errorText = "💌 This email is already registered! We switched the form below to 'Sign In' so you can enter your password and log in immediately.";
-        setIsNewUser(false); // Instantly switches the UI form back to Sign-In mode for them!
-      } else if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
         errorText = "❌ We couldn't find a match for that email or password. Please verify your details.";
       } else if (err.code === "auth/invalid-email") {
         errorText = "❌ The email format is invalid. Please double check.";
@@ -134,7 +160,7 @@ export default function LoginPage() {
       
       const result = await signInWithPopup(auth, provider);
       await provisionUserInFirestore(result.user);
-      router.push("/dashboard");
+      await handleUserRouting(result.user);
     } catch (err) {
       console.error(err);
       setMessage({ text: "Google Sign-In was cancelled or rejected.", type: "error" });
@@ -173,7 +199,7 @@ export default function LoginPage() {
     try {
       const result = await confirmationResult.confirm(verificationCode);
       await provisionUserInFirestore(result.user);
-      router.push("/dashboard");
+      await handleUserRouting(result.user);
     } catch (err) {
       console.error(err);
       setMessage({ text: "Incorrect or expired SMS verification code.", type: "error" });

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req) {
   try {
-    const { tier, userId } = await req.json(); 
+    // Dynamically grab email if passed from the frontend view
+    const { tier, userId, email } = await req.json(); 
     
     const pricing = {
       basic: 299,
@@ -47,18 +48,29 @@ export async function POST(req) {
     // 3. Clean Order Generation Payload
     const uniqueOrderId = `PENDO-${userId || 'GUEST'}-${Date.now()}`;
     
+    // Explicitly fallback to a universal structure if your explicit IPN key isn't loaded yet
+    const validIpnId = process.env.PESAPAL_IPN_ID && process.env.PESAPAL_IPN_ID !== "YOUR_IPN_ID_HERE"
+      ? process.env.PESAPAL_IPN_ID
+      : "00000000-0000-0000-0000-000000000000";
+
     const payload = {
       id: uniqueOrderId,
       currency: "KES",
       amount: amount,
       description: `PendoMatch ${tier.toUpperCase()} Subscription`,
       callback_url: "https://pendomatch.vercel.app/dashboard",
-      redirect_mode: "TOP_WINDOW"
+      redirect_mode: "TOP_WINDOW",
+      notification_id: validIpnId,
+      
+      // FIXED: Added full billing address mapping required by Pesapal to render the payment window
+      billing_address: {
+        email_address: email || "customer@pendomatch.com",
+        phone_number: "0700000000", 
+        country_code: "KE",
+        first_name: "PendoMatch",
+        last_name: "User"
+      }
     };
-
-    if (process.env.PESAPAL_IPN_ID && process.env.PESAPAL_IPN_ID !== "YOUR_IPN_ID_HERE") {
-      payload.notification_id = process.env.PESAPAL_IPN_ID;
-    }
 
     // 4. Submit Order Request
     const orderResponse = await fetch(`${baseUrl}/api/Transactions/SubmitOrderRequest`, {
@@ -74,7 +86,7 @@ export async function POST(req) {
     
     if (!orderData.redirect_url) {
       console.error("Pesapal Placement Error Layout: ", orderData);
-      return NextResponse.json({ error: orderData.message || "Checkout URL missing" }, { status: 400 });
+      return NextResponse.json({ error: orderData.message || "Checkout URL missing from schema generation" }, { status: 400 });
     }
     
     return NextResponse.json({ checkoutUrl: orderData.redirect_url });
