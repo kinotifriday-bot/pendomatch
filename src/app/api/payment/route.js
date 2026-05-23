@@ -21,15 +21,15 @@ export async function POST(req) {
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET || process.env.PESAPAL_SECRET;
 
     if (!consumerKey || !consumerSecret) {
-      console.error("Payment Error: Secret Pesapal credentials missing from Vercel configuration.");
+      console.error("Payment Error: Secret Pesapal credentials missing from environment configuration.");
       return NextResponse.json({ error: "Gateway credentials missing in environment" }, { status: 500 });
     }
 
-    // Toggle URLs here depending on testing environment (pay.pesapal.com = live, cybersansa.pesapal.com = sandbox)
-    const isProduction = !consumerKey.includes('sandbox');
-    const baseUrl = isProduction ? "https://pay.pesapal.com/v3" : "https://cybersansa.pesapal.com/preview/v3";
+    // FIXED: Adjusted sandbox domain spelling to hit Pesapal's official servers
+    const isProduction = process.env.PESAPAL_URL === 'production' || !consumerKey.includes('sb-');
+    const baseUrl = isProduction ? "https://pay.pesapal.com/v3" : "https://cybersandbox.pesapal.com/v3";
 
-    // 2. Authenticate with Pesapal
+    // 1. Authenticate with Pesapal
     const authResponse = await fetch(`${baseUrl}/api/Auth/RequestToken`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -45,24 +45,44 @@ export async function POST(req) {
       return NextResponse.json({ error: authData.message || "Pesapal authorization rejected" }, { status: 401 });
     }
 
+    // 2. DYNAMIC AUTO-REGISTRATION: Fetch or generate the IPN ID automatically
+    let validIpnId = "";
+    try {
+      const ipnResponse = await fetch(`${baseUrl}/api/URLSetup/RegisterIPN`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authData.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: "https://mingle-pink.vercel.app/api/callback",
+          ipn_notification_type: "GET"
+        })
+      });
+      
+      const ipnData = await ipnResponse.json();
+      validIpnId = ipnData.ipn_id;
+    } catch (ipnError) {
+      console.error("Dynamic IPN Registration Fallback triggered:", ipnError);
+    }
+
+    // Final structural fallback just in case the API drops the field altogether
+    if (!validIpnId) {
+      validIpnId = process.env.PESAPAL_IPN_ID || "00000000-0000-0000-0000-000000000000";
+    }
+
     // 3. Clean Order Generation Payload
     const uniqueOrderId = `PENDO-${userId || 'GUEST'}-${Date.now()}`;
-    
-    // Explicitly fallback to a universal structure if your explicit IPN key isn't loaded yet
-    const validIpnId = process.env.PESAPAL_IPN_ID && process.env.PESAPAL_IPN_ID !== "YOUR_IPN_ID_HERE"
-      ? process.env.PESAPAL_IPN_ID
-      : "00000000-0000-0000-0000-000000000000";
 
     const payload = {
       id: uniqueOrderId,
       currency: "KES",
       amount: amount,
       description: `PendoMatch ${tier.toUpperCase()} Subscription`,
-      callback_url: "https://pendomatch.vercel.app/dashboard",
+      callback_url: "https://mingle-pink.vercel.app/dashboard",
       redirect_mode: "TOP_WINDOW",
       notification_id: validIpnId,
       
-      // FIXED: Added full billing address mapping required by Pesapal to render the payment window
       billing_address: {
         email_address: email || "customer@pendomatch.com",
         phone_number: "0700000000", 
