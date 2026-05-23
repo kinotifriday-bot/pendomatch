@@ -4,6 +4,18 @@ import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, arrayUnion } from "firebase/firestore";
 import { motion, useMotionValue, useTransform, useAnimation } from "framer-motion";
 
+// Helper helper function to return gender-specific silhouette shadows dynamically
+const getGenderAvatar = (gender) => {
+  switch (gender) {
+    case "Male":
+      return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80"; // Male Shadow Avatar
+    case "Female":
+      return "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80"; // Female Shadow Avatar
+    default:
+      return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80"; // General Shadow Avatar
+  }
+};
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("Home");
   const [user, setUser] = useState(null);
@@ -32,6 +44,7 @@ export default function Dashboard() {
             country: "Kenya",
             bio: "No bio yet.",
             profilePic: "",
+            gender: "",
             interests: [],
             likedUsers: [],
             passedUsers: []
@@ -249,7 +262,7 @@ function SwipeCard({ userProfile, isTop, onSwipe }) {
         )}
 
         <img 
-          src={userProfile.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"} 
+          src={userProfile.profilePic || getGenderAvatar(userProfile.gender)} 
           alt={userProfile.displayName}
           className="w-full h-full object-cover pointer-events-none"
         />
@@ -357,7 +370,7 @@ function ProfileView({ userData, loading }) {
       <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4 text-sm">
         <div className="flex justify-center mb-2">
           <img 
-            src={userData?.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"} 
+            src={userData?.profilePic || getGenderAvatar(userData?.gender)} 
             alt="My Avatar" 
             className="w-24 h-24 rounded-full object-cover border-2 border-rose-500/20 p-1"
           />
