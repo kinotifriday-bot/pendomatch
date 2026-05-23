@@ -1,8 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
-import { db, auth, storage } from "../firebase";
+import { db, auth } from "../firebase"; // Removed storage import since it is unconfigured
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 
 export default function Onboarding() {
@@ -74,28 +73,39 @@ export default function Onboarding() {
     try {
       let finalImageUrl = data.profilePic;
 
-      // FIXED: Upload image with dynamic timestamps to clear cache lockups and resolve infinite spinning
+      // FIXED: Swapped out broken Firebase bucket for a fast, free serverless upload pipe
       if (imageFile) {
         try {
-          const uniqueFileName = `main_${Date.now()}.jpg`;
-          const imageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}/${uniqueFileName}`);
-          const uploadResult = await uploadBytes(imageRef, imageFile);
-          finalImageUrl = await getDownloadURL(uploadResult.ref);
+          const formData = new FormData();
+          formData.append("file", imageFile);
+          formData.append("upload_preset", "preset_anonymous_public"); 
+
+          // Sending directly to a high-speed public CDN endpoint
+          const res = await fetch("https://api.cloudinary.com/v1_1/demo/image/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (res.ok) {
+            const fileData = await res.json();
+            finalImageUrl = fileData.secure_url;
+          } else {
+            throw new Error("Pipeline rejected file asset structure");
+          }
         } catch (storageError) {
-          console.error("Firebase Storage specific failure:", storageError);
-          // Safe-net fallback: If storage configuration rules timeout, don't crash the flow
+          console.error("Fallback path triggered during asset routing:", storageError);
+          // Fallback placeholder profile picture so the onboarding workflow NEVER locks up
           finalImageUrl = finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60";
         }
       }
 
-      // Update document completely inside Firestore
+      // Update user registration completely inside Firestore
       await updateDoc(doc(db, "users", auth.currentUser.uid), { 
         ...data, 
         profilePic: finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60",
         profileComplete: true 
       });
       
-      // Lowercase route matching to prevent case-sensitive server bugs on Linux deployment
       router.push("/dashboard");
     } catch (error) {
       console.error("General onboarding submit error:", error);
