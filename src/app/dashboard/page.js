@@ -20,15 +20,16 @@ export default function Dashboard() {
         if (userDoc.exists()) {
           setUser(userDoc.data());
         } else {
-          // SAFEGUARD FOR NEW REGISTRATIONS:
-          // If the registration flow forgot to create the Firestore document, create it here on the fly!
+          // SAFEGUARD FOR NEW REGISTRATIONS
           const newUserData = {
             uid: auth.currentUser.uid,
-            displayName: auth.currentUser.displayName || "New User",
+            displayName: auth.currentUser.displayName || "New Matcher",
             email: auth.currentUser.email,
-            tier: "free", // Default them to free safely
-            country: "Not set",
-            bio: "No bio yet."
+            tier: "free",
+            country: "Kenya",
+            bio: "No bio yet.",
+            profilePic: "",
+            interests: []
           };
           await setDoc(userRef, newUserData);
           setUser(newUserData);
@@ -44,9 +45,8 @@ export default function Dashboard() {
             
             // 2. Strict Filter: Wipe out raw anonymous/incomplete test profiles from the screen
             const hasRealName = u.displayName && u.displayName !== "New User" && u.displayName !== "New Matcher" && u.displayName !== "Anonymous";
-            const hasRealBio = u.bio && u.bio !== "No bio yet.";
             
-            return isNotMe && hasRealName && hasRealBio;
+            return isNotMe && hasRealName;
           });
         
         setAllUsers(usersList);
@@ -57,7 +57,7 @@ export default function Dashboard() {
       }
     };
     fetchData();
-  }, [activeTab]); // Triggers refresh when switching screens to keep it clean
+  }, [activeTab]);
 
   const handleUpgrade = async (selectedTier) => {
     try {
@@ -74,7 +74,7 @@ export default function Dashboard() {
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
       } else {
-        alert("Payment gateway connection error. Please try again.");
+        alert(data.error || "Payment gateway connection error. Please try again.");
       }
     } catch (err) {
       console.error("Payment initiation error:", err);
@@ -83,40 +83,84 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
-      <header className="p-6 border-b border-slate-900 flex justify-between items-center">
-        <h1 className="text-xl font-black text-rose-500">PendoMatch</h1>
+      <header className="p-6 border-b border-slate-900 flex justify-between items-center bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+        <h1 className="text-xl font-black text-rose-500 tracking-wider">PendoMatch</h1>
+        {user?.tier && (
+          <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            {user.tier} Tier
+          </span>
+        )}
       </header>
 
-      <main className="p-6">
+      <main className="p-6 max-w-md mx-auto">
         {activeTab === "Home" && (
-          <div>
-            <h2 className="text-2xl font-black mb-6">Discover Everyone</h2>
+          <div className="space-y-6 text-center">
+            <h2 className="text-xl font-black tracking-tight text-left">Discover Everyone</h2>
             {allUsers.length === 0 ? (
-              <div className="text-center mt-20 text-slate-500 text-sm">
+              <div className="text-center mt-20 text-slate-500 text-sm animate-pulse">
                 Looking for new profiles... Active matches will reveal themselves shortly!
               </div>
             ) : (
-              allUsers.map(u => (
-                <div key={u.id} className="bg-slate-900 p-5 rounded-2xl mb-4 border border-slate-800">
-                  <h3 className="font-bold text-lg">{u.displayName || "Anonymous"}</h3>
-                  <p className="text-sm text-slate-400 mt-1">{u.bio || "No bio yet."}</p>
-                  <p className="text-[10px] uppercase font-bold text-rose-500 mt-2">{u.country || "Not specified"}</p>
-                </div>
-              ))
+              <div className="flex flex-col items-center justify-center gap-6">
+                {allUsers.map(u => (
+                  <div key={u.id} className="relative w-full h-[480px] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 transition transform hover:scale-[1.01]">
+                    
+                    {/* 1. Main Profile Photo Layout */}
+                    <img 
+                      src={u.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"} 
+                      alt={u.displayName}
+                      className="w-full h-full object-cover"
+                    />
+
+                    {/* 2. Sleek Deep Gradient Overlay for UI Text Readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+
+                    {/* 3. Card Information Details Layout */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6 text-left space-y-2">
+                      <div className="flex items-baseline gap-2">
+                        <h3 className="text-2xl font-black text-white tracking-tight">{u.displayName || "Anonymous"}</h3>
+                        {u.age && <span className="text-xl text-slate-300 font-medium">{u.age}</span>}
+                      </div>
+                      
+                      <p className="text-xs text-rose-400 font-bold tracking-wide">📍 {u.country || "Chuka"}</p>
+                      
+                      <p className="text-sm text-slate-200 font-normal line-clamp-3 leading-relaxed">
+                        {u.bio || "No bio added yet."}
+                      </p>
+                      
+                      {/* Interactive Selection Hobbies Tags */}
+                      {u.interests && u.interests.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-2">
+                          {u.interests.slice(0, 3).map((interest) => (
+                            <span key={interest} className="text-[10px] font-extrabold bg-white/10 backdrop-blur-md text-white px-2.5 py-1 rounded-full border border-white/10">
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
         
-        {activeTab === "Matches" && <div className="text-center mt-20 text-slate-500">No matches yet.</div>}
+        {activeTab === "Matches" && <div className="text-center mt-20 text-slate-500 text-sm">No mutual matches yet. Keep discovering!</div>}
         
         {activeTab === "Messages" && <MessagesView user={user} onUpgrade={handleUpgrade} />}
         
         {activeTab === "Profile" && <ProfileView userData={user} loading={loading} />}
       </main>
 
-      <nav className="fixed bottom-0 w-full bg-slate-950 border-t border-slate-900 p-4 flex justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-lg border-t border-slate-900 p-4 flex justify-around items-center z-50 max-w-md mx-auto">
         {["Home", "Matches", "Messages", "Profile"].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={activeTab === tab ? "text-rose-500 font-bold" : "text-slate-500"}>
+          <button 
+            key={tab} 
+            onClick={() => setActiveTab(tab)} 
+            className={`text-xs font-black transition tracking-wider ${activeTab === tab ? "text-rose-500 scale-105" : "text-slate-500 hover:text-slate-400"}`}
+          >
             {tab}
           </button>
         ))}
@@ -129,68 +173,4 @@ function MessagesView({ user, onUpgrade }) {
   const userTier = user?.tier?.toLowerCase() || "free";
   const isPremium = userTier === "premium" || userTier === "plus" || userTier === "basic";
 
-  if (!isPremium) {
-    return (
-      <div className="p-4 max-w-4xl mx-auto text-white rounded-2xl mt-4">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">🔒</div>
-          <h2 className="text-2xl font-black text-rose-500">Upgrade to Chat</h2>
-          <p className="text-slate-400 mt-1 text-sm">Match for free, but unlock a tier layout to start conversation threads.</p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Tier 2: Basic */}
-          <div className="border border-slate-800 bg-slate-900/50 p-5 rounded-2xl flex flex-col justify-between">
-            <div>
-              <h3 className="text-lg font-bold">Tier 2: Basic</h3>
-              <p className="text-xl font-black mt-1 text-rose-400">KES 299</p>
-              <p className="text-xs text-slate-400 mt-3 leading-relaxed">Up to 4 Photos, Expanded Profile Views, More Messaging Actions.</p>
-            </div>
-            <button onClick={() => onUpgrade('basic')} className="mt-5 w-full py-2.5 bg-rose-600 rounded-xl font-bold hover:bg-rose-700 transition text-sm">Upgrade Basic</button>
-          </div>
-
-          {/* Tier 3: Plus */}
-          <div className="border border-slate-800 bg-slate-900 p-5 rounded-2xl flex flex-col justify-between relative">
-            <div>
-              <h3 className="text-lg font-bold text-yellow-400">Tier 3: Plus</h3>
-              <p className="text-xl font-black mt-1 text-yellow-400">KES 499</p>
-              <p className="text-xs text-slate-300 mt-3 leading-relaxed">Up to 8 Photos, 100 Profile Views per day, 10 Active Chat Threads.</p>
-            </div>
-            <button onClick={() => onUpgrade('plus')} className="mt-5 w-full py-2.5 bg-yellow-500 text-slate-950 rounded-xl font-bold hover:bg-yellow-600 transition text-sm">Upgrade Plus</button>
-          </div>
-
-          {/* Tier 4: Premium */}
-          <div className="border-2 border-rose-500 p-5 rounded-2xl flex flex-col justify-between relative bg-gradient-to-b from-slate-900 to-rose-950/40">
-            <span className="absolute -top-3 right-4 bg-rose-500 text-white text-[10px] px-2.5 py-0.5 rounded-full uppercase font-black tracking-wider">Best Value</span>
-            <div>
-              <h3 className="text-lg font-bold text-rose-400">Tier 4: Premium</h3>
-              <p className="text-xl font-black mt-1 text-rose-400">KES 799</p>
-              <p className="text-xs text-slate-200 mt-3 leading-relaxed">Unlimited HD Photos & Video, Unlimited Browsing + Rewinds, Priority Instant DM Delivery.</p>
-            </div>
-            <button onClick={() => onUpgrade('premium')} className="mt-5 w-full py-2.5 bg-rose-500 rounded-xl font-bold hover:bg-rose-600 transition text-sm shadow-lg shadow-rose-500/20">Upgrade Premium</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return <div className="text-center mt-20 text-slate-500">Your inbox is empty.</div>;
-}
-
-function ProfileView({ userData, loading }) {
-  if (loading) return <div className="text-center mt-10 text-slate-500 animate-pulse">Syncing profile...</div>;
-  
-  return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-black">My Profile</h2>
-      <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
-        <p><strong>Name:</strong> {userData?.displayName || "Not set"}</p>
-        <p><strong>Country:</strong> {userData?.country || "Not set"}</p>
-        <p><strong>Bio:</strong> {userData?.bio || "No bio yet"}</p>
-      </div>
-      {/* CASE RECTIFICATION: Points explicitly to /Onboarding to prevent 404 router failure */}
-      <button onClick={() => window.location.href='/Onboarding'} className="w-full py-3 bg-rose-600 rounded-xl font-bold hover:bg-rose-700 transition">
-        Edit Profile
-      </button>
-    </div>
-  );
-}
+  if (!
