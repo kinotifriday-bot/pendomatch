@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { db, auth } from "../firebase"; // Removed storage import since it is unconfigured
+import { db, auth } from "../firebase"; 
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
@@ -10,7 +10,14 @@ export default function Onboarding() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [data, setData] = useState({ bio: "", interests: [], intent: "", profilePic: "" });
+  const [data, setData] = useState({ 
+    bio: "", 
+    interests: [], 
+    intent: "", 
+    profilePic: "",
+    birthday: "", 
+    gender: "" 
+  });
   const router = useRouter();
 
   const interestsList = [
@@ -31,7 +38,9 @@ export default function Onboarding() {
               bio: fetchedData.bio || "",
               interests: fetchedData.interests || [],
               intent: fetchedData.intent || "",
-              profilePic: fetchedData.profilePic || ""
+              profilePic: fetchedData.profilePic || "",
+              birthday: fetchedData.birthday || "",
+              gender: fetchedData.gender || ""
             });
             if (fetchedData.profilePic) {
               setImagePreview(fetchedData.profilePic);
@@ -63,6 +72,33 @@ export default function Onboarding() {
     }
   };
 
+  // Dynamic Age Gate & Future Block Validation Rule
+  const validateAge = (birthDateString) => {
+    if (!birthDateString) return false;
+    
+    const today = new Date();
+    const birthDate = new Date(birthDateString);
+    
+    if (birthDate >= today) {
+      alert("Birth date cannot be today or in the future!");
+      return false;
+    }
+
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDifference = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    if (age < 18) {
+      alert("You must be 18 years or older to join PendoMatch.");
+      return false;
+    }
+
+    return true;
+  };
+
   const saveProfile = async () => {
     if (!auth.currentUser) {
       alert("Session expired. Please log in again.");
@@ -73,14 +109,13 @@ export default function Onboarding() {
     try {
       let finalImageUrl = data.profilePic;
 
-      // FIXED: Swapped out broken Firebase bucket for a fast, free serverless upload pipe
+      // High-speed public CDN bypass pipe
       if (imageFile) {
         try {
           const formData = new FormData();
           formData.append("file", imageFile);
           formData.append("upload_preset", "preset_anonymous_public"); 
 
-          // Sending directly to a high-speed public CDN endpoint
           const res = await fetch("https://api.cloudinary.com/v1_1/demo/image/upload", {
             method: "POST",
             body: formData,
@@ -94,7 +129,6 @@ export default function Onboarding() {
           }
         } catch (storageError) {
           console.error("Fallback path triggered during asset routing:", storageError);
-          // Fallback placeholder profile picture so the onboarding workflow NEVER locks up
           finalImageUrl = finalImageUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60";
         }
       }
@@ -121,21 +155,58 @@ export default function Onboarding() {
     <div className="min-h-screen bg-slate-950 p-6 flex flex-col items-center justify-center text-white">
       <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-slate-800 shadow-2xl">
         
-        {/* Step 1: Bio */}
+        {/* Step 1: Bio, Birthday, and Gender */}
         {step === 1 && (
           <div className="space-y-4">
             <h2 className="text-2xl font-black text-rose-500">About You</h2>
             <p className="text-xs text-slate-400">Tell everyone a little bit about yourself.</p>
+            
             <textarea 
               value={data.bio}
               onChange={(e) => setData({...data, bio: e.target.value})}
               placeholder="Write a catchy bio..."
-              className="w-full h-32 p-4 bg-slate-950 rounded-xl border border-slate-700 outline-none focus:border-rose-500 text-white resize-none"
+              className="w-full h-24 p-4 bg-slate-950 rounded-xl border border-slate-700 outline-none focus:border-rose-500 text-white resize-none text-sm"
             />
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400">Date of Birth</label>
+              <input 
+                type="date"
+                value={data.birthday}
+                max={new Date().toISOString().split("T")[0]} 
+                onChange={(e) => setData({...data, birthday: e.target.value})}
+                className="w-full p-3 bg-slate-950 rounded-xl border border-slate-700 outline-none focus:border-rose-500 text-white text-sm text-slate-300"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400">Gender Identity</label>
+              <div className="grid grid-cols-3 gap-2">
+                {["Male", "Female", "Other"].map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setData({...data, gender: g})}
+                    className={`py-2.5 rounded-xl text-xs font-bold border transition active:scale-[0.98] ${
+                      data.gender === g 
+                        ? 'bg-rose-600 border-rose-600 text-white' 
+                        : 'bg-slate-800 border-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button 
-              disabled={!data.bio.trim()}
-              onClick={() => setStep(2)} 
-              className="w-full py-3 bg-rose-600 disabled:opacity-50 disabled:pointer-events-none rounded-xl font-black transition active:scale-[0.99]"
+              disabled={!data.bio.trim() || !data.birthday || !data.gender}
+              onClick={() => {
+                if (validateAge(data.birthday)) {
+                  setStep(2);
+                }
+              }} 
+              className="w-full py-3 bg-rose-600 disabled:opacity-50 disabled:pointer-events-none rounded-xl font-black transition active:scale-[0.99] mt-2"
             >
               Next
             </button>
